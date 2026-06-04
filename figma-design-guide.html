@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quiet Reader · Figma 设计教程</title>
+<style>
+  :root {
+    --bg: #F8F4EC;
+    --surface: #FFFDF8;
+    --text: #2A2520;
+    --text-secondary: #7A6F64;
+    --border: #E4D8C8;
+    --accent: #8A6A43;
+    --soft-accent: #EFE3D0;
+    --high: #9A5A3C;
+    --medium: #B08A5A;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "SF Pro Text", Inter, sans-serif;
+    font-size: 16px;
+    line-height: 1.75;
+    padding: 0 0 80px;
+  }
+  .header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 40px 60px 32px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .header h1 {
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    margin-bottom: 8px;
+  }
+  .header p {
+    color: var(--text-secondary);
+    font-size: 15px;
+  }
+  .content {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 60px;
+  }
+  h2 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 48px 0 16px;
+    padding-top: 48px;
+    border-top: 1px solid var(--border);
+    color: var(--accent);
+    letter-spacing: -0.3px;
+  }
+  h2:first-of-type { border-top: none; margin-top: 40px; }
+  h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 28px 0 10px;
+    color: var(--text);
+  }
+  p { margin-bottom: 12px; color: var(--text); }
+  ul, ol { padding-left: 20px; margin-bottom: 14px; }
+  li { margin-bottom: 6px; color: var(--text); }
+
+  .step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin: 16px 0;
+  }
+  .step-num {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+  .step h4 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+
+  .kbd {
+    display: inline-block;
+    background: var(--soft-accent);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 7px;
+    font-size: 13px;
+    font-family: monospace;
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .color-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 14px 0;
+  }
+  .color-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+  .color-swatch {
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    border: 1px solid rgba(0,0,0,0.08);
+    flex-shrink: 0;
+  }
+  .color-meta { line-height: 1.3; }
+  .color-name { font-weight: 600; font-size: 12px; }
+  .color-hex { color: var(--text-secondary); font-family: monospace; font-size: 11px; }
+
+  .tip {
+    background: var(--soft-accent);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    padding: 12px 16px;
+    margin: 14px 0;
+    font-size: 14px;
+    color: var(--text);
+  }
+  .tip strong { color: var(--accent); }
+
+  .warn {
+    background: #FEF3EC;
+    border-left: 3px solid var(--high);
+    border-radius: 0 8px 8px 0;
+    padding: 12px 16px;
+    margin: 14px 0;
+    font-size: 14px;
+  }
+
+  code {
+    background: var(--soft-accent);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: monospace;
+    font-size: 13px;
+    color: var(--high);
+  }
+
+  .frame-preview {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 20px 0;
+  }
+  .frame-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+  }
+
+  .component-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 14px 0;
+  }
+  .component-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 14px;
+  }
+  .component-item .name {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--accent);
+    margin-bottom: 3px;
+  }
+  .component-item .desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin: 32px 0;
+  }
+  .toc h4 { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-secondary); margin-bottom: 10px; }
+  .toc ol { padding-left: 18px; }
+  .toc li { font-size: 14px; color: var(--accent); margin-bottom: 4px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+
+  .layout-sketch {
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    font-family: monospace;
+    font-size: 13px;
+    color: var(--text-secondary);
+    background: var(--surface);
+    white-space: pre;
+    line-height: 1.6;
+    margin: 12px 0;
+    overflow-x: auto;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Quiet Reader · Figma 设计教程</h1>
+  <p>从零开始，在 Figma 里完成这个沉浸式阅读工具的设计稿 · 桌面端 1440×1024</p>
+</div>
+
+<div class="content">
+
+  <div class="toc">
+    <h4>目录</h4>
+    <ol>
+      <li><a href="#setup">第一步：建文件结构</a></li>
+      <li><a href="#designsystem">第二步：建 Design System（先建这个）</a></li>
+      <li><a href="#components">第三步：做基础 Components</a></li>
+      <li><a href="#frame1">第四步：Frame 01 Setup 页</a></li>
+      <li><a href="#frame2">第五步：Frame 02 Chapter Preload 页</a></li>
+      <li><a href="#frame3">第六步：Frame 03 Immersive Reader 页</a></li>
+      <li><a href="#tips">常用快捷键 & 小技巧</a></li>
+    </ol>
+  </div>
+
+  <!-- ============================== -->
+  <h2 id="setup">第一步：建文件结构</h2>
+
+  <div class="step">
+    <div class="step-num">Step 1</div>
+    <h4>新建 Figma 文件</h4>
+    <ul>
+      <li>打开 Figma → <strong>New design file</strong></li>
+      <li>文件名命名为 <code>Quiet Reader · Design</code></li>
+    </ul>
+  </div>
+
+  <div class="step">
+    <div class="step-num">Step 2</div>
+    <h4>建两个 Page</h4>
+    <p>左下角 Pages 面板，点 <strong>+</strong> 新建页面：</p>
+    <ul>
+      <li><strong>Page 1</strong> → 改名为 <code>🎨 Design System</code></li>
+      <li><strong>Page 2</strong> → 改名为 <code>📄 Screens</code></li>
+    </ul>
+    <div class="tip">先把 Design System 建好再做 Screens，效率高很多。改名方式：双击 page 名称。</div>
+  </div>
+
+  <!-- ============================== -->
+  <h2 id="designsystem">第二步：建 Design System</h2>
+  <p>在 <code>🎨 Design System</code> 页面里操作。这个页面不需要精美排版，只是一个"系统仓库"。</p>
+
+  <h3>2.1 建 Color Styles</h3>
+  <p>你需要把颜色定义成 Figma 的 <strong>Local Styles</strong>，这样在所有 Frame 里都能复用。</p>
+
+  <div class="step">
+    <div class="step-num">操作</div>
+    <h4>逐个创建颜色</h4>
+    <ol>
+      <li>用矩形工具 <span class="kbd">R</span> 画一个小方块，填充对应颜色</li>
+      <li>选中方块 → 右侧 Fill 区域点 <strong>4个点</strong> 图标（Style）</li>
+      <li>点 <strong>+</strong> → 起名（见下方命名规则）→ 保存</li>
+    </ol>
+  </div>
+
+  <p><strong>颜色命名规范</strong>（建议用 <code>color/角色</code> 格式）：</p>
+
+  <div class="color-row">
+    <div class="color-chip">
+      <div class="color-swatch" style="background:#F8F4EC"></div>
+      <div class="color-meta">
+        <div class="color-name">color/bg</div>
+        <div class="color-hex">#F8F4EC</div>
+      </div>
+    </div>
+    <div class="color-chip">
+      <div class="color-swatch" style="background:#FFFDF8"></div>
+      <div class="color-meta">
+        <div class="color-name">color/surface</div>
+        <div class="color-hex">#FFFDF8</div>
+      </div>
+    </div>
+    <div class="color-chip">
+      <div class="color-swatch" style="background:#2A2520"></div>
+      <div class="color-meta">
+        <div class="color-name">color/text-primary</div>
+        <div class="color-hex">#2A2520</div>
+      </div>
+    </div>
+    <div class="color-chip">
+      <div class="color-swatch" style="background:#7A6F64"></div>
+      <div class="color-meta">
+        <div class="color-name">color/text-secondary</div>
+        <div class="color-hex">#7A6F64</div>
+      </div>
+    </div>
+    <div class="color-chip">
+      <div class="color-swatch" style="background:#E4D8C8"></div>
+      <div class="color-meta">
+        <div class="color-name">color/border</div>
+        <div class="color-hex">#E4D8C8</div>
+      </div>
+    </div>
+    <div class="color-chip">
+      <div class="color-swatch" style="background:#8A6A43"></div>
+      <div class="color-meta">
+        <div class="color-name">color/accent</div>
+        <div class="color-hex">#8A6A43</div>
+      </div>
+    </div>
+    <div class="color-chip">
+      <div class="color-swatch" style="background:#EFE3D0"></div>
+      <div class="color-meta">
+        <div class="color-name">color/soft-accent</div>
+        <div class="color-hex">#EFE3D0</div>
+      </div>
+    </div>
+    <div class="color-chip">
+      <div class="color-swatch" style="background:#9A5A3C"></div>
+      <div class="color-meta">
+        <div class="color-name">color/severity-high</div>
+        <div class="color-hex">#9A5A3C</div>
+      </div>
+    </div>
+    <div class="color-chip">
+      <div class="color-swatch" style="background:#B08A5A"></div>
+      <div class="color-meta">
+        <div class="color-name">color/severity-medium</div>
+        <div class="color-hex">#B08A5A</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tip"><strong>提示：</strong> 在 Design System 页面，你可以把这些色块整齐排列当参考。但最重要的是它们被保存成了 Style，可以从右侧面板随时调用。</div>
+
+  <h3>2.2 建 Text Styles</h3>
+  <p>用文字工具 <span class="kbd">T</span> 写一段文字，设置好字体和字号后，同样点右侧 <strong>Text → Style 图标 → +</strong> 保存。</p>
+
+  <p>先做这几个 Text Styles：</p>
+
+  <div class="frame-preview">
+    <div class="frame-label">Text Styles 清单</div>
+    <table style="width:100%;border-collapse:collapse;font-size:14px;">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border);text-align:left;">
+          <th style="padding:8px 12px;color:var(--text-secondary);font-weight:500;">名称</th>
+          <th style="padding:8px 12px;color:var(--text-secondary);font-weight:500;">字体</th>
+          <th style="padding:8px 12px;color:var(--text-secondary);font-weight:500;">字号</th>
+          <th style="padding:8px 12px;color:var(--text-secondary);font-weight:500;">行高</th>
+          <th style="padding:8px 12px;color:var(--text-secondary);font-weight:500;">用途</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px 12px;font-family:monospace;color:var(--accent);">text/reader-body</td>
+          <td style="padding:8px 12px;">Georgia</td>
+          <td style="padding:8px 12px;">20px</td>
+          <td style="padding:8px 12px;">36px</td>
+          <td style="padding:8px 12px;">正文阅读</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px 12px;font-family:monospace;color:var(--accent);">text/ui-body</td>
+          <td style="padding:8px 12px;">Inter</td>
+          <td style="padding:8px 12px;">15px</td>
+          <td style="padding:8px 12px;">24px</td>
+          <td style="padding:8px 12px;">UI 正文、说明</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px 12px;font-family:monospace;color:var(--accent);">text/card-title</td>
+          <td style="padding:8px 12px;">Inter</td>
+          <td style="padding:8px 12px;">18px · 600</td>
+          <td style="padding:8px 12px;">28px</td>
+          <td style="padding:8px 12px;">卡片标题、词</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px 12px;font-family:monospace;color:var(--accent);">text/card-body</td>
+          <td style="padding:8px 12px;">Inter</td>
+          <td style="padding:8px 12px;">14px</td>
+          <td style="padding:8px 12px;">22px</td>
+          <td style="padding:8px 12px;">卡片正文</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px 12px;font-family:monospace;color:var(--accent);">text/label</td>
+          <td style="padding:8px 12px;">Inter</td>
+          <td style="padding:8px 12px;">13px · 500</td>
+          <td style="padding:8px 12px;">20px</td>
+          <td style="padding:8px 12px;">辅助说明、标签</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;font-family:monospace;color:var(--accent);">text/page-title</td>
+          <td style="padding:8px 12px;">Inter</td>
+          <td style="padding:8px 12px;">32px · 600</td>
+          <td style="padding:8px 12px;">40px</td>
+          <td style="padding:8px 12px;">页面大标题</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tip"><strong>Georgia 没有中文字形</strong>，没关系 — 正文是英文小说原文，中文只出现在卡片和 UI 里（用 Inter 即可）。如果要兼容中文正文，改用 <strong>Noto Serif SC</strong>。</div>
+
+  <!-- ============================== -->
+  <h2 id="components">第三步：做基础 Components</h2>
+  <p>还是在 <code>🎨 Design System</code> 页面。Components 做好后，Screens 里直接拖进来，改改文字就行。</p>
+
+  <h3>3.1 什么是 Component？</h3>
+  <p>Component 是可复用的模块。做法：画好一个元素 → 选中 → <span class="kbd">⌘ Option K</span>（Mac）或右键 → <strong>Create component</strong>。之后拖出来的都是 Instance，改 Master 会同步更新。</p>
+
+  <h3>3.2 Button</h3>
+  <div class="step">
+    <div class="step-num">操作步骤</div>
+    <h4>做主按钮 Primary Button</h4>
+    <ol>
+      <li>用矩形 <span class="kbd">R</span> 画一个 <code>160 × 44</code> 的矩形</li>
+      <li>Fill: <code>#8A6A43</code>（accent），Corner radius: <code>8</code></li>
+      <li>在矩形上加文字 <span class="kbd">T</span>：<code>Preload Chapter</code>，字体 Inter · 15px · 600 · white</li>
+      <li>选中矩形 + 文字 → <span class="kbd">⌘ Option K</span> → 命名 <code>Button/Primary</code></li>
+    </ol>
+  </div>
+
+  <div class="step">
+    <div class="step-num">操作步骤</div>
+    <h4>做次级按钮 Ghost Button</h4>
+    <ol>
+      <li>复制 Primary Button，修改 Fill 为 <strong>无</strong>，加 Stroke: <code>#E4D8C8</code> · 1px</li>
+      <li>文字颜色改为 <code>#7A6F64</code></li>
+      <li>命名 <code>Button/Ghost</code></li>
+    </ol>
+  </div>
+
+  <h3>3.3 Input & Textarea</h3>
+  <div class="step">
+    <div class="step-num">操作步骤</div>
+    <h4>Input 输入框</h4>
+    <ol>
+      <li>矩形：宽 <code>320</code> · 高 <code>44</code></li>
+      <li>Fill: <code>#FFFDF8</code>，Stroke: <code>#E4D8C8</code> · 1px，Radius: <code>6</code></li>
+      <li>加 placeholder 文字（<code>#7A6F64</code>）放在内部，左边距 <code>14px</code></li>
+      <li>加 label 文字在矩形上方，间距 <code>8px</code>，样式 <code>text/label</code></li>
+      <li>全选 → Create component → <code>Input/Default</code></li>
+    </ol>
+    <div class="tip">Textarea 同理，高度改为 <code>120</code> 以上，placeholder 文字靠左上对齐。</div>
+  </div>
+
+  <h3>3.4 VocabularyCard（词汇卡片）</h3>
+  <p>这是最重要的 component 之一。结构：</p>
+
+  <div class="layout-sketch">┌──────────────────────────────────────┐
+│  concede                    · high   │  ← 词 + severity badge
+│  承认，尤其是不情愿地承认              │  ← 中文释义
+│  core verb                           │  ← 词性标签
+│  ─────────────────────────────────── │
+│  为什么重要：它是句子的核心动作……      │  ← 说明
+└──────────────────────────────────────┘</div>
+
+  <div class="step">
+    <div class="step-num">操作步骤</div>
+    <h4>画 VocabularyCard</h4>
+    <ol>
+      <li>画矩形：宽 <code>200</code> · 高 <code>120</code>，Fill: <code>#FFFDF8</code>，Stroke: <code>#E4D8C8</code>，Radius: <code>10</code></li>
+      <li>内边距：上下左右各 <code>16px</code></li>
+      <li>第一行：左侧词（<code>text/card-title · #2A2520</code>），右侧 severity badge（小胶囊形，Fill: <code>#EFE3D0</code>，文字 <code>text/label · #9A5A3C</code>）</li>
+      <li>第二行：中文释义（<code>text/card-body · #2A2520</code>）</li>
+      <li>第三行：词性标签（<code>text/label · #7A6F64</code>）</li>
+      <li>分割线：1px · <code>#E4D8C8</code>，用矩形高 1px 做</li>
+      <li>第四行：说明文字（<code>text/label · #7A6F64</code>）</li>
+      <li>全选 → <code>Card/Vocabulary</code></li>
+    </ol>
+  </div>
+
+  <h3>3.5 ContextCard（背景知识卡片）</h3>
+  <div class="layout-sketch">┌──────────────────────────────────────┐
+│  boarding school                     │  ← 词条
+│  英国寄宿学校常见于成长小说……          │  ← 说明
+│  ─────────────────────────────────── │
+│  为什么现在有用：帮助理解学校场景……    │
+└──────────────────────────────────────┘</div>
+
+  <p>做法类似 VocabularyCard，去掉 severity badge，左上角可加一个浅色小图标（书本/地点/人物，用 <strong>Phosphor Icons</strong> 插件）。命名 <code>Card/Context</code>。</p>
+
+  <h3>3.6 InlineAnnotation</h3>
+  <p>这是正文里被标注词的样式。</p>
+  <div class="step">
+    <div class="step-num">操作步骤</div>
+    <h4>做 InlineAnnotation（低调下划线版）</h4>
+    <ol>
+      <li>文字：<code>concede</code>，样式 <code>text/reader-body</code></li>
+      <li>在文字下方加一条 1px 高的矩形，颜色 <code>#B08A5A</code>（medium accent），宽度与文字对齐</li>
+      <li>可以另做一版：文字加底色 <code>#EFE3D0</code>，Radius: <code>3</code>，不加下划线</li>
+      <li>命名 <code>InlineAnnotation/Underline</code></li>
+    </ol>
+  </div>
+
+  <div class="warn"><strong>避免：</strong>荧光黄高亮、红色下划线、粗体词 — 这些都会让注意力离开正文。</div>
+
+  <h3>3.7 AnnotationPopover（点词后的浮层）</h3>
+  <div class="layout-sketch">┌────────────────────┐
+│  concede           │  ← 词
+│  承认（不情愿地）   │  ← 中文释义
+│  ────────────────  │
+│  原句: "He had to  │
+│  concede defeat."  │
+│  severity: medium  │
+└────────────────────┘</div>
+
+  <p>画一个 <code>220 × auto</code> 的浮层框，Fill: <code>#FFFDF8</code>，Stroke: <code>#E4D8C8</code>，Radius: <code>10</code>，底部加一个小三角指示箭头（用多边形工具）。命名 <code>Popover/Annotation</code>。</p>
+
+  <!-- ============================== -->
+  <h2 id="frame1">第四步：Frame 01 Setup 页</h2>
+  <p>切换到 <code>📄 Screens</code> 页面，开始做正式页面。</p>
+
+  <div class="step">
+    <div class="step-num">Step 1</div>
+    <h4>新建 Frame</h4>
+    <ol>
+      <li>按 <span class="kbd">F</span> 选 Frame 工具</li>
+      <li>在右侧面板选 <strong>Custom</strong>，宽 <code>1440</code> · 高 <code>1024</code></li>
+      <li>双击 Frame 名，改为 <code>01 Setup</code></li>
+      <li>Fill: <code>#F8F4EC</code></li>
+    </ol>
+  </div>
+
+  <div class="step">
+    <div class="step-num">Step 2</div>
+    <h4>左侧介绍区（480px 宽）</h4>
+    <div class="layout-sketch">左侧内容区域（x=120, y=0, w=480, h=1024）
+
+  垂直居中于左侧
+
+  Product Name
+  "Quiet Reader"
+  32px · 600 · #2A2520
+
+  Tagline
+  "Read smoothly, without spoilers."
+  18px · #7A6F64 · mt-12
+
+  ────────────────────
+
+  本章准备说明（3-4行文字）
+  "Paste your chapter below.
+  We'll prepare a spoiler-free
+  vocabulary preview before
+  you start reading."
+  15px · #7A6F64</div>
+
+    <p>用一个 Auto Layout Frame（<span class="kbd">⌘ Shift A</span>）装左侧内容，方向 Vertical，Gap 16px。</p>
+  </div>
+
+  <div class="step">
+    <div class="step-num">Step 3</div>
+    <h4>右侧表单区（520px 宽）</h4>
+    <div class="layout-sketch">表单容器（x=800, y=0, w=520, h=1024）
+  背景：#FFFDF8
+  左侧 border: 1px · #E4D8C8
+
+  内边距 top: 80px  left/right: 60px
+
+  [Input] Book title
+  [Input] Chapter title
+  [Input] Chapter index
+  [Input] Test score (e.g. IELTS 6.0)
+  [Textarea] Reading difficulties
+  [Textarea] Safe previous summary
+  [Textarea] Chapter content  ← 最高，约 200px
+
+  [Button/Primary] Preload Chapter  ← 底部，全宽</div>
+
+    <p>所有 Input 组件从 Design System 拖过来，用 Auto Layout 纵向排列，Gap <code>20px</code>。</p>
+  </div>
+
+  <div class="tip"><strong>让表单"安静"的关键：</strong>输入框之间间距充足（20px+），字段 label 简短，textarea 没有滚动条感。不要加分割线或 section header，留白即分组。</div>
+
+  <!-- ============================== -->
+  <h2 id="frame2">第五步：Frame 02 Chapter Preload 页</h2>
+
+  <div class="step">
+    <div class="step-num">Step 1</div>
+    <h4>新建 Frame</h4>
+    <p>同样 1440×1024，Fill: <code>#F8F4EC</code>，命名 <code>02 Chapter Preload</code>。</p>
+  </div>
+
+  <div class="step">
+    <div class="step-num">Step 2</div>
+    <h4>页面结构</h4>
+    <div class="layout-sketch">顶部 Nav Bar（h=64, bg=#FFFDF8, border-bottom:#E4D8C8）
+  左：Chapter title（18px · 600）
+  右：progress label（13px · #7A6F64）
+
+中间内容区（max-width: 800px, 水平居中）
+
+  ┌─ Non-Spoiler Preview Card ──────────────────┐
+  │  A QUIET INTRODUCTION  （label · uppercase）  │
+  │  这一章，Alex 到达了新学校……（200字以内）       │
+  └──────────────────────────────────────────────┘
+
+  Core Vocabulary（section header · label · uppercase）
+  ┌──词卡──┐  ┌──词卡──┐  ┌──词卡──┐
+  │concede │  │tenure  │  │aloof   │
+  └────────┘  └────────┘  └────────┘
+
+  Safe Context（section header）
+  ┌──背景卡────────────────┐  ┌──背景卡────────────────┐
+  │ boarding school        │  │ prefect system         │
+  └────────────────────────┘  └────────────────────────┘
+
+底部（position: sticky bottom）
+  [Button/Primary] Start Reading →</div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">Step 3</div>
+    <h4>Non-Spoiler Preview Card</h4>
+    <ol>
+      <li>画一个全宽（800px）卡片，Fill: <code>#FFFDF8</code>，Stroke: <code>#E4D8C8</code>，Radius: <code>12</code>，内边距 <code>32px</code></li>
+      <li>顶部小标签：<code>BEFORE YOU READ</code>，13px · 500 · <code>#8A6A43</code> · letter-spacing: 1px</li>
+      <li>正文：Georgia · 16px · <code>#2A2520</code> · line-height 28px</li>
+    </ol>
+  </div>
+
+  <div class="step">
+    <div class="step-num">Step 4</div>
+    <h4>词卡和背景卡的排列</h4>
+    <p>把之前做好的 <code>Card/Vocabulary</code> 和 <code>Card/Context</code> 拖进来，用一个 Auto Layout 横向排列，Gap <code>12px</code>，允许 wrap（自动换行）。</p>
+    <div class="tip">词卡宽 <code>200px</code>，背景卡宽 <code>380px</code>，这样每行放 3 张词卡 / 2 张背景卡，节奏感好。</div>
+  </div>
+
+  <!-- ============================== -->
+  <h2 id="frame3">第六步：Frame 03 Immersive Reader 页</h2>
+  <p>这是设计上最重要的页面，需要最多时间打磨。</p>
+
+  <div class="step">
+    <div class="step-num">Step 1</div>
+    <h4>新建 Frame</h4>
+    <p>1440×1024，Fill: <code>#F8F4EC</code>，命名 <code>03 Immersive Reader</code>。</p>
+  </div>
+
+  <div class="step">
+    <div class="step-num">Step 2</div>
+    <h4>顶部 Chapter Bar（极细）</h4>
+    <div class="layout-sketch">h=48px  bg=#FFFDF8  border-bottom: 1px · #E4D8C8
+
+左：Chapter 3 · The Arrival  （14px · #7A6F64）
+右：progress bar（宽120px · h=3px · bg:#EFE3D0 · fill:#8A6A43）</div>
+    <p>progress bar：画两个叠放的矩形，底层 <code>#EFE3D0</code>，上层 <code>#8A6A43</code>，宽度代表进度（如 40%）。</p>
+  </div>
+
+  <div class="step">
+    <div class="step-num">Step 3</div>
+    <h4>正文阅读区（最重要）</h4>
+    <ul>
+      <li>居中容器：宽 <code>720px</code>，左右两侧各留 <code>360px</code>，上下 padding <code>64px</code></li>
+      <li>把正文用 <code>text/reader-body</code> 样式写进去（Georgia · 20px · line-height 36px · <code>#2A2520</code>）</li>
+      <li>段落之间 gap: <code>28px</code></li>
+      <li>在需要标注的词上叠放 <code>InlineAnnotation/Underline</code> component</li>
+    </ul>
+    <div class="tip"><strong>让正文"像书"的关键：</strong>宽度不超过 720px，行高一定要 1.7 以上，背景要暖，字号不能小。这三个是最核心的。</div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">Step 4</div>
+    <h4>右侧解释面板（静止状态 = 隐藏）</h4>
+    <div class="layout-sketch">右侧面板（x=1120, y=48, w=280, h=976）
+  bg=#FFFDF8  border-left: 1px · #E4D8C8
+
+  （未点词时：空白 / 浅灰提示文字）
+  "Tap an underlined word
+   to see its meaning."
+
+  （点词后显示）
+  ┌──────────────────────────┐
+  │ concede                  │  词
+  │ 承认，尤其是不情愿地承认  │  释义
+  │ ─────────────────────── │
+  │ ORIGINAL SENTENCE        │  label
+  │ "He conceded that the    │  原句
+  │  argument was sound."    │
+  │ ─────────────────────── │
+  │ severity: medium         │  badge
+  └──────────────────────────┘</div>
+
+    <p>做两个版本，用 Figma 的 <strong>Variants</strong> 功能区分 <code>state=empty</code> 和 <code>state=active</code>：</p>
+    <ol>
+      <li>先做两版 Frame（empty / active）</li>
+      <li>全选 → 右键 → <strong>Combine as variants</strong></li>
+      <li>在 Screens 里拖进来，右侧面板可以切换 state</li>
+    </ol>
+  </div>
+
+  <div class="step">
+    <div class="step-num">Step 5</div>
+    <h4>点词浮层（Popover）版本</h4>
+    <p>如果偏好浮层而不是固定右侧面板，把之前的 <code>Popover/Annotation</code> 放在某个被标注词的正上方或下方，模拟点击后的状态。这样正文宽度可以做到 <code>760px</code>，更宽敞。</p>
+  </div>
+
+  <!-- ============================== -->
+  <h2 id="tips">常用快捷键 & 小技巧</h2>
+
+  <div class="frame-preview">
+    <div class="frame-label">必备快捷键</div>
+    <table style="width:100%;border-collapse:collapse;font-size:14px;">
+      <tbody>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px 12px;width:50%"><span class="kbd">F</span> Frame 工具</td>
+          <td style="padding:8px 12px"><span class="kbd">R</span> 矩形工具</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px 12px"><span class="kbd">T</span> 文字工具</td>
+          <td style="padding:8px 12px"><span class="kbd">V</span> 选择工具</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px 12px"><span class="kbd">⌘ G</span> Group</td>
+          <td style="padding:8px 12px"><span class="kbd">⌘ Shift A</span> Auto Layout</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px 12px"><span class="kbd">⌘ Option K</span> Create Component</td>
+          <td style="padding:8px 12px"><span class="kbd">⌘ D</span> 复制（原位）</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px 12px"><span class="kbd">⌘ /</span> 全局搜索（找插件/操作）</td>
+          <td style="padding:8px 12px"><span class="kbd">Alt 拖拽</span> 测量间距</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px"><span class="kbd">⌘ Z</span> 撤销</td>
+          <td style="padding:8px 12px"><span class="kbd">⌘ Shift H</span> 水平居中对齐</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Auto Layout 是你最好的朋友</h3>
+  <p>每个有多个子元素的容器，都应该加 Auto Layout（<span class="kbd">⌘ Shift A</span>）。好处：</p>
+  <ul>
+    <li>改了内容，间距自动调整</li>
+    <li>可以设置 padding、gap、方向</li>
+    <li>可以 "hug content" 或 "fill container" 控制尺寸</li>
+  </ul>
+
+  <h3>推荐插件（用 <span class="kbd">⌘ /</span> 搜索安装）</h3>
+  <ul>
+    <li><strong>Phosphor Icons</strong> — 线条风图标，适合这个设计的气质</li>
+    <li><strong>Unsplash</strong> — 可以快速填充占位图片</li>
+    <li><strong>Lorem ipsum</strong> — 快速生成占位文字</li>
+    <li><strong>Stark</strong> — 检查颜色对比度（无障碍）</li>
+  </ul>
+
+  <h3>建议的工作顺序</h3>
+  <ol>
+    <li>✅ Design System（颜色 + 字体）</li>
+    <li>✅ 基础 Components（Button, Input, Card）</li>
+    <li>➡️ Frame 03 Immersive Reader（最核心，先做好）</li>
+    <li>➡️ Frame 02 Chapter Preload</li>
+    <li>➡️ Frame 01 Setup（相对简单）</li>
+    <li>最后：精修间距、对齐、微调颜色</li>
+  </ol>
+
+  <div class="tip" style="margin-top:32px;font-size:15px;">
+    <strong>最重要的原则：</strong>在这个设计里，"对的感觉"是文字本身很舒适——间距够宽，背景够暖，标注够低调。先把 Frame 03 的正文排版调到你自己愿意长时间看的状态，其他一切都是配角。
+  </div>
+
+</div>
+</body>
+</html>

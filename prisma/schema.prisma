@@ -1,0 +1,80 @@
+datasource db {
+  provider = "sqlite"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model UserProfileCache {
+  id            String   @id @default(cuid())
+  userInputHash String   @unique
+  userInputJson String
+  profileJson   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Book {
+  id          String    @id @default(cuid())
+  contentHash String    @unique
+  filename    String
+  title       String
+  author      String?
+  sourceType  String
+  metadataJson String?
+  chapters    Chapter[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Chapter {
+  id          String   @id @default(cuid())
+  bookId      String
+  chapterHash String   @unique
+  sourceId    String
+  index       Int
+  title       String
+  content     String
+  wordCount   Int
+  sourceHref  String?
+  book        Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([bookId, index])
+}
+
+model ChapterAnalysisCache {
+  id              String   @id @default(cuid())
+  chapterHash     String
+  userProfileHash String
+  analysisJson    String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([chapterHash, userProfileHash])
+}
+
+model NonSpoilerContextCache {
+  id                  String   @id @default(cuid())
+  chapterHash         String
+  readingProgressHash String
+  contextJson         String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([chapterHash, readingProgressHash])
+}
+
+model ReadingProgressRecord {
+  id                  String   @id @default(cuid())
+  readingProgressHash String   @unique
+  bookTitle           String
+  currentChapterIndex Int
+  currentChapterTitle String
+  safePreviousSummary String?
+  progressJson        String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
