@@ -13,6 +13,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+*.epub
+
 prisma/dev.db
 prisma/dev.db-*
 frontend/node_modules/
