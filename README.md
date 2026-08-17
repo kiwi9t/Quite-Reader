@@ -1,188 +1,193 @@
 # Quiet Reader
 
-**Quiet Reader** is a pre-reading companion for second-language readers of English books.
+Quiet Reader is a pre-reading assistant for people reading English books as a second language.
 
-**Quiet Reader** 是一个面向英文书籍外语阅读者的预习助手。
+Upload an EPUB, TXT, or Markdown book, choose a chapter, and Quiet Reader prepares a short spoiler-safe preview before you read: vocabulary cards, useful background context, and explanations adapted to the reader's English level.
 
----
-
-## The Problem / 痛点
-
-Reading a novel in a second language is a constant stop-and-go: you follow the story, hit an unfamiliar word, reach for a dictionary, and lose the thread. Do it enough times and the experience becomes exhausting rather than enjoyable.
-
-用外语读小说是一种持续的打断：你跟着情节走，撞上一个不认识的词，掏出词典查，等你找回状态，情绪和节奏早已断了。次数多了，阅读变成了一件苦差事。
-
-**Quiet Reader solves this with a "pre-read" step.**
-
-Before you open a chapter, Quiet Reader analyzes the text and prepares three things for you:
-
-1. **Vocabulary cards** — only the words likely to block *your* comprehension, explained in context, not as dictionary entries.
-2. **Spoiler-free background** — cultural, historical, and contextual knowledge you need for this chapter, without giving away anything that happens next.
-3. **Personalized explanations** — adapted to your English level and the reading difficulties you struggle with most.
-
-**Quiet Reader 用"预读"解决这个问题。**
-
-在你打开章节前，Quiet Reader 分析文本并为你准备好三件事：
-
-1. **词汇卡片** — 只筛选出真正可能阻碍*你*理解的词，用上下文解释，而不是词典释义。
-2. **无剧透背景知识** — 帮助你读懂当前章节所需的文化、历史与语境知识，但绝不透露后续情节。
-3. **个性化解释** — 根据你的英语水平和自述难点量身定制。
+Quiet Reader 是一个面向英语二语读者的章节预习助手。上传书籍，选择章节，它会在你正式阅读前生成词汇卡片、无剧透背景知识和个性化解释。
 
 ---
 
-## How It Works: The Agent Architecture / 工作原理：Agent 架构
+## Why This Exists
 
-Quiet Reader runs a sequential three-agent workflow every time you request a chapter preview. Each agent has a single responsibility and passes its output to the next.
+Reading a novel in another language is often interrupted by dictionary lookups. One unknown word is fine; dozens of them break the rhythm.
 
-每次请求章节预览时，Quiet Reader 运行一个顺序三 Agent 工作流。每个 Agent 有单一职责，将输出传递给下一个。
+Quiet Reader tries to move that friction before the reading session. Instead of explaining every difficult-looking word, it focuses on the words and context that are most likely to block comprehension in this specific chapter, for this specific reader.
 
-```
-START
-  │
-  ▼
-[UserProfilerAgent]
-  Converts your exam score and self-reported difficulties
-  into a structured language profile (CEFR level, vocabulary size,
-  weak word types, common error patterns).
-  将你的考试成绩和自述难点转换为结构化语言画像
-  （CEFR 等级、词汇量估计、薄弱词类、常见理解错误）。
-  │
-  ▼
-[ParserAnalyzerAgent]
-  Reads the chapter and your profile, then selects only the
-  "core obstacle words" — words whose absence would break your
-  understanding of that sentence. Guessable or decorative words
-  are filtered out.
-  读取章节与你的画像，仅筛选出"核心障碍词"——
-  缺少这个词你就无法理解那句话的词。
-  可以猜出来的词或装饰性词汇会被过滤掉。
-  │
-  ▼
-[NonSpoilerContextAgent]
-  Provides background context (cultural, historical, character
-  relationships, setting) using strict timeline isolation — it
-  knows the full book but is only allowed to use what exists
-  up to your current chapter.
-  提供背景知识（文化、历史、人物关系、世界观设定），
-  遵守严格的时间线隔离规则——它知道全书内容，
-  但只能使用截止到当前章节已存在的信息。
-  │
-  ▼
-END → vocabulary cards + spoiler-free preview
-       词汇卡片 + 无剧透预览
+---
+
+## Features
+
+- Upload and parse `.epub`, `.txt`, and `.md` books
+- Auto-split books into chapters
+- Generate personalized vocabulary cards from chapter context
+- Provide spoiler-safe background knowledge for the current chapter
+- Adapt explanations to the reader's level, test score, and self-reported difficulties
+- Cache parsed books and agent outputs with SQLite + Prisma
+- Switch between `mock`, OpenAI, Gemini, and DeepSeek providers
+- React/Vite frontend with a TypeScript Node API backend
+
+---
+
+## Demo Flow
+
+1. Enter your English level or test score.
+2. Upload a book file.
+3. Select the chapter you are about to read.
+4. Generate a pre-reading preview.
+5. Read vocabulary cards and background context before opening the chapter.
+
+The `mock` provider works without an API key, so you can try the full UI locally before connecting a real LLM.
+
+---
+
+## Architecture
+
+Quiet Reader runs a sequential three-agent workflow:
+
+```text
+User input + chapter text
+        |
+        v
+UserProfilerAgent
+Builds a language profile from the reader's level and difficulties.
+        |
+        v
+ParserAnalyzerAgent
+Finds chapter-specific words that are likely to block comprehension.
+        |
+        v
+NonSpoilerContextAgent
+Generates helpful background context without revealing future plot.
+        |
+        v
+Vocabulary cards + spoiler-safe preview
 ```
 
-**State and caching.** All three agents share a typed workflow state. Each agent's output is cached to SQLite (keyed by a hash of the chapter content + user profile), so repeated requests for the same chapter return instantly.
-
-**状态与缓存。** 三个 Agent 共享一个类型化工作流状态。每个 Agent 的输出都被缓存到 SQLite（以章节内容 + 用户画像的哈希为键），对同一章节的重复请求会即时返回。
-
-**Spoiler detection.** NonSpoilerContextAgent's output is post-processed by a phrase-level spoiler risk detector before it reaches the user. If risky phrases are found, the output is rejected and the agent retries.
-
-**剧透检测。** NonSpoilerContextAgent 的输出在到达用户前，会经过短语级剧透风险检测器的后处理。如果发现风险短语，输出会被拒绝，Agent 重试。
-
----
-
-## Features / 功能
-
-- Upload EPUB, TXT, and Markdown books; chapters are auto-split and cached
-- Three-agent sequential workflow: user profiling → vocabulary filtering → spoiler-free context
-- Per-user vocabulary cards adapted to your English level and self-reported difficulties
-- Spoiler-safe background knowledge with strict timeline isolation and post-generation detection
-- SQLite cache via Prisma — repeated requests for the same chapter are free
-- Switchable LLM providers at runtime: mock (no key needed), OpenAI, Gemini, DeepSeek
-- React/Vite bilingual frontend
+The backend stores reusable results in SQLite. Repeated requests for the same chapter and reader profile can return from cache instead of calling the LLM again.
 
 ---
 
 ## Tech Stack
 
-- **Backend:** Node.js, TypeScript, native HTTP server
 - **Frontend:** React, Vite, TypeScript
-- **Database / cache:** SQLite with Prisma ORM
+- **Backend:** Node.js, TypeScript, native HTTP server
+- **Database/cache:** SQLite, Prisma, `better-sqlite3`
+- **Validation:** Zod
 - **LLM providers:** mock, OpenAI, Gemini, DeepSeek
-- **Book ingestion:** EPUB, TXT, Markdown parsing
+- **Book ingestion:** EPUB, TXT, Markdown
 
 ---
 
 ## Project Structure
 
-```
+```text
 .
 ├── src/
-│   ├── agents/             # UserProfilerAgent, ParserAnalyzerAgent, NonSpoilerContextAgent
-│   ├── workflow/           # readingWorkflow.ts — orchestrates the three agents
-│   ├── ingestion/          # EPUB / TXT / Markdown parsers and chapter splitter
-│   ├── llm/                # LLM client abstraction (mock, OpenAI, Gemini, DeepSeek)
-│   ├── persistence/        # SQLite cache repository via Prisma
-│   ├── schemas/            # Zod schemas for structured LLM output
-│   ├── http/               # Request handling, rate limiting, error types
-│   └── server.ts           # HTTP server entry point
-├── frontend/               # React/Vite frontend
-├── prisma/                 # Prisma schema and SQLite database config
-├── .env.example
-├── package.json
-└── frontend/package.json
+│   ├── agents/          # Three-agent reading workflow
+│   ├── config/          # Environment loading
+│   ├── http/            # Request parsing, errors, logging, rate limiting
+│   ├── ingestion/       # EPUB/TXT/Markdown parsing
+│   ├── llm/             # Provider clients and structured output helpers
+│   ├── persistence/     # Prisma client and cache repository
+│   ├── presenters/      # API response shaping
+│   ├── schemas/         # Zod schemas
+│   ├── workflow/        # Workflow orchestration
+│   └── server.ts        # API entry point
+├── frontend/            # React/Vite web app
+├── prisma/              # Prisma schema
+├── .env.example         # Local environment template
+├── .env.cloud.example   # Cloud deployment environment template
+├── railway.json         # Railway backend deployment config
+└── package.json
 ```
 
 ---
 
-## Getting Started
+## Local Development
 
-### 1. Install backend dependencies
+### Requirements
+
+- Node.js 20 or newer
+- npm
+
+### 1. Install dependencies
 
 ```bash
 npm install
+npm --prefix frontend install
 ```
 
-### 2. Install frontend dependencies
-
-```bash
-cd frontend && npm install && cd ..
-```
-
-### 3. Create environment file
+### 2. Create local environment file
 
 ```bash
 cp .env.example .env
 ```
 
-For a local demo with no API key:
+For a no-key local demo:
 
 ```env
 LLM_PROVIDER=mock
+DATABASE_URL="file:./prisma/dev.db"
 PORT=3000
 ```
 
-To use a real model, set `LLM_PROVIDER` to `openai`, `gemini`, or `deepseek` and add the matching key.
+To use a real provider, set `LLM_PROVIDER` to `openai`, `gemini`, or `deepseek`, then add the matching API key.
 
-### 4. Initialize the database
+### 3. Initialize SQLite
 
 ```bash
 npm run db:push
 ```
 
-### 5. Start the backend
+### 4. Start the backend
 
 ```bash
 npm run server
-# → http://localhost:3000
 ```
 
-### 6. Start the frontend
+The API runs at:
+
+```text
+http://localhost:3000
+```
+
+### 5. Start the frontend
+
+In a second terminal:
 
 ```bash
-cd frontend && npm run dev
-# → http://localhost:5173
+npm --prefix frontend run dev
+```
+
+The app runs at:
+
+```text
+http://localhost:5173
 ```
 
 ---
 
 ## Environment Variables
 
+### Backend
+
 ```env
 LLM_PROVIDER=mock
 DATABASE_URL="file:./prisma/dev.db"
 PORT=3000
+ALLOWED_ORIGIN=http://localhost:5173
+
+MAX_JSON_BODY_BYTES=256000
+MAX_UPLOAD_BYTES=20971520
+RATE_LIMIT_MAX_REQUESTS=60
+RATE_LIMIT_WINDOW_MS=60000
+LLM_TIMEOUT_MS=45000
+LLM_MAX_PROMPT_CHARS=90000
+LLM_STRUCTURED_MAX_ATTEMPTS=3
+
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-5-mini
 
 GEMINI_API_KEY=your_gemini_api_key_here
 GEMINI_MODEL=gemini-2.5-flash
@@ -190,113 +195,123 @@ GEMINI_MODEL=gemini-2.5-flash
 DEEPSEEK_API_KEY=your_deepseek_api_key_here
 DEEPSEEK_MODEL=deepseek-v4-flash
 DEEPSEEK_BASE_URL=https://api.deepseek.com
-
-OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_MODEL=gpt-4o-mini
 ```
 
-`mock` is always available with no API key required.
+### Frontend
+
+```env
+VITE_API_BASE_URL=http://localhost:3000
+```
+
+Only variables prefixed with `VITE_` are exposed to the frontend build.
 
 ---
 
 ## Scripts
 
-**Backend:**
+### Backend
 
 ```bash
-npm run db:push       # sync Prisma schema to SQLite
-npm run db:generate   # regenerate Prisma client
-npm run server        # start backend
-npm run typecheck     # TypeScript check
+npm run db:generate   # Generate Prisma client
+npm run db:push       # Generate Prisma client and initialize SQLite tables
+npm run server        # Start the API in development
+npm run start         # Cloud start command: init DB, then start API
+npm run typecheck     # Run TypeScript checks
 ```
 
-**Frontend:**
+### Frontend
 
 ```bash
-cd frontend
-npm run dev
-npm run build
-npm run preview
+npm --prefix frontend run dev       # Start Vite dev server
+npm --prefix frontend run build     # Build production frontend
+npm --prefix frontend run preview   # Preview production build locally
 ```
-
----
-
-## Quick Cloud Deploy / 快速上线
-
-The lowest-friction production setup is:
-
-- Backend API on Railway with a persistent Volume for SQLite
-- Frontend on Vercel as a static Vite app
-
-最低改动的上线方式：
-
-- 后端 API 部署到 Railway，并给 SQLite 挂一个持久化 Volume
-- 前端部署到 Vercel，作为 Vite 静态站点
-
-### Backend: Railway
-
-1. Create a Railway project from this repository.
-2. Set the service root to the repository root.
-3. Add a Volume mounted at `/data`.
-4. Add backend environment variables from `.env.cloud.example`.
-5. Set:
-
-```env
-DATABASE_URL="file:/data/quiet-reader.db"
-ALLOWED_ORIGIN=https://your-frontend-domain.vercel.app
-```
-
-Railway will use `railway.json` and run:
-
-```bash
-npm run start
-```
-
-The start script initializes the SQLite schema on boot and then starts the API server.
-
-### Frontend: Vercel
-
-1. Create a Vercel project from this repository.
-2. Set the project root directory to `frontend`.
-3. Add:
-
-```env
-VITE_API_BASE_URL=https://your-backend-domain.up.railway.app
-```
-
-Vercel will use `frontend/vercel.json`, build with `npm run build`, and publish `dist`.
-
-### Smoke Test
-
-After both deployments finish:
-
-```bash
-curl https://your-backend-domain.up.railway.app/health
-```
-
-Then open the frontend URL, upload a small `.txt` book, and request a chapter preview.
 
 ---
 
 ## API Overview
 
 | Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/health` | Server status and available providers |
-| `GET` | `/api/providers` | List configured LLM providers |
-| `POST` | `/api/providers/active` | Switch active provider |
-| `GET` | `/api/limits` | Upload / rate limits |
-| `GET` | `/api/cache/stats` | Cache hit statistics |
-| `POST` | `/api/book/upload?filename=<name>` | Upload and parse a book |
-| `POST` | `/api/reading/preload?provider=<provider>` | Run the three-agent workflow and return vocabulary cards + preview |
+| --- | --- | --- |
+| `GET` | `/health` | Check API health and configured LLM providers |
+| `GET` | `/api/providers` | List available LLM providers |
+| `POST` | `/api/providers/active` | Change the default provider for the running server |
+| `GET` | `/api/limits` | Return upload, body, and rate limits |
+| `GET` | `/api/cache/stats` | Return cache statistics |
+| `POST` | `/api/book/upload?filename=<name>` | Upload and parse a book file |
+| `POST` | `/api/reading/preload?provider=<provider>` | Generate vocabulary cards and spoiler-safe preview |
 
 ---
 
-## GitHub Notes
+## Quick Cloud Deploy
 
-Do not commit `.env`, local databases, build output, or `node_modules` — they are in `.gitignore`.
+The simplest deployment path is:
 
-Safe to commit: source code, `package.json`, `package-lock.json`, `.env.example`, Prisma schema, frontend source files.
+```text
+Railway backend + persistent SQLite volume
+Vercel frontend
+```
+
+### Backend on Railway
+
+1. Create a Railway project from this GitHub repository.
+2. Use the repository root as the service root.
+3. Attach a Railway Volume mounted at `/data`.
+4. Add environment variables from `.env.cloud.example`.
+5. Set the SQLite database path:
+
+```env
+DATABASE_URL="file:/data/quiet-reader.db"
+```
+
+6. After the frontend is deployed, set:
+
+```env
+ALLOWED_ORIGIN=https://your-frontend-domain.vercel.app
+```
+
+Railway uses `railway.json` and starts the backend with:
+
+```bash
+npm run start
+```
+
+### Frontend on Vercel
+
+1. Import this GitHub repository into Vercel.
+2. Set the root directory to `frontend`.
+3. Set:
+
+```env
+VITE_API_BASE_URL=https://your-backend-domain.up.railway.app
+```
+
+4. Deploy.
+
+After both services are live, check:
+
+```bash
+curl https://your-backend-domain.up.railway.app/health
+```
+
+Then open the Vercel URL and upload a small `.txt` file to test the full flow.
+
+---
+
+## Data and Privacy Notes
+
+Quiet Reader parses uploaded books on the backend and stores parsed book/chapter data plus cached agent outputs in SQLite. If you deploy this publicly, review your storage policy and only upload content you have the right to process.
+
+For a production app with user accounts or long-term libraries, consider replacing SQLite with Postgres and adding authentication.
+
+---
+
+## Development Notes
+
+- Do not commit `.env`, local SQLite databases, `node_modules`, or build output.
+- `.env.example` is for local development.
+- `.env.cloud.example` is a deployment template; put real secrets in Railway/Vercel dashboards, not in Git.
+- The `mock` provider is useful for UI testing and demos without LLM cost.
 
 ---
 
