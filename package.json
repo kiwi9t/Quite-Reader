@@ -7,6 +7,7 @@
     "db:generate": "prisma generate",
     "db:push": "prisma generate && tsx src/persistence/initDb.ts",
     "server": "tsx src/server.ts",
+    "start": "npm run db:push && npm run server",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],

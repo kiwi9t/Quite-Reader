@@ -221,6 +221,63 @@ npm run preview
 
 ---
 
+## Quick Cloud Deploy / 快速上线
+
+The lowest-friction production setup is:
+
+- Backend API on Railway with a persistent Volume for SQLite
+- Frontend on Vercel as a static Vite app
+
+最低改动的上线方式：
+
+- 后端 API 部署到 Railway，并给 SQLite 挂一个持久化 Volume
+- 前端部署到 Vercel，作为 Vite 静态站点
+
+### Backend: Railway
+
+1. Create a Railway project from this repository.
+2. Set the service root to the repository root.
+3. Add a Volume mounted at `/data`.
+4. Add backend environment variables from `.env.cloud.example`.
+5. Set:
+
+```env
+DATABASE_URL="file:/data/quiet-reader.db"
+ALLOWED_ORIGIN=https://your-frontend-domain.vercel.app
+```
+
+Railway will use `railway.json` and run:
+
+```bash
+npm run start
+```
+
+The start script initializes the SQLite schema on boot and then starts the API server.
+
+### Frontend: Vercel
+
+1. Create a Vercel project from this repository.
+2. Set the project root directory to `frontend`.
+3. Add:
+
+```env
+VITE_API_BASE_URL=https://your-backend-domain.up.railway.app
+```
+
+Vercel will use `frontend/vercel.json`, build with `npm run build`, and publish `dist`.
+
+### Smoke Test
+
+After both deployments finish:
+
+```bash
+curl https://your-backend-domain.up.railway.app/health
+```
+
+Then open the frontend URL, upload a small `.txt` book, and request a chapter preview.
+
+---
+
 ## API Overview
 
 | Method | Path | Description |
