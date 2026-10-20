@@ -21,3 +21,8 @@ prisma/dev.db-*
 frontend/node_modules/
 frontend/dist/
 frontend/tsconfig.tsbuildinfo
+
+# Supabase: generated Edge Function bundle and CLI state
+supabase/functions/quiet-reader/bundle.js
+supabase/.temp/
+supabase/.branches/

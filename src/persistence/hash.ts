@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { Buffer } from "node:buffer";
 
 type JsonValue =
   | null

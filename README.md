@@ -23,9 +23,10 @@ Quiet Reader tries to move that friction before the reading session. Instead of 
 - Generate personalized vocabulary cards from chapter context
 - Provide spoiler-safe background knowledge for the current chapter
 - Adapt explanations to the reader's level, test score, and self-reported difficulties
-- Cache parsed books and agent outputs with SQLite + Prisma
+- Cache parsed books and agent outputs with SQLite + Prisma locally, or Supabase Postgres in the cloud
 - Switch between `mock`, OpenAI, Gemini, and DeepSeek providers
 - Readers can bring their own DeepSeek API key (stored only in their browser)
+- Deploys to Railway (Node) or Supabase (Edge Function + Postgres)
 - React/Vite frontend with a TypeScript Node API backend
 
 ---
@@ -73,7 +74,7 @@ The backend stores reusable results in SQLite. Repeated requests for the same ch
 
 - **Frontend:** React, Vite, TypeScript
 - **Backend:** Node.js, TypeScript, native HTTP server
-- **Database/cache:** SQLite, Prisma, `better-sqlite3`
+- **Database/cache:** SQLite, Prisma, `better-sqlite3` (local); Postgres via `postgres` (Supabase)
 - **Validation:** Zod
 - **LLM providers:** mock, OpenAI, Gemini, DeepSeek
 - **Book ingestion:** EPUB, TXT, Markdown
@@ -90,13 +91,15 @@ The backend stores reusable results in SQLite. Repeated requests for the same ch
 │   ├── http/            # Request parsing, errors, logging, rate limiting
 │   ├── ingestion/       # EPUB/TXT/Markdown parsing
 │   ├── llm/             # Provider clients and structured output helpers
-│   ├── persistence/     # Prisma client and cache repository
+│   ├── edge/            # Supabase Edge Function entry (Deno)
+│   ├── persistence/     # Cache repository, SQLite (Prisma) and Postgres stores
 │   ├── presenters/      # API response shaping
 │   ├── schemas/         # Zod schemas
 │   ├── workflow/        # Workflow orchestration
-│   └── server.ts        # API entry point
+│   └── server.ts        # Node API entry point
 ├── frontend/            # React/Vite web app
-├── prisma/              # Prisma schema
+├── prisma/              # Prisma schema (local SQLite)
+├── supabase/            # Supabase config, Postgres migration, Edge Function
 ├── .env.example         # Local environment template
 ├── .env.cloud.example   # Cloud deployment environment template
 ├── railway.json         # Railway backend deployment config
@@ -268,7 +271,78 @@ Choosing a provider in the app is now per browser (sent as `?provider=` with eac
 
 ---
 
-## Quick Cloud Deploy
+## Deploy on Supabase
+
+Supabase runs the backend as an Edge Function and stores the cache in Supabase Postgres. The frontend stays on Vercel.
+
+```text
+Vercel frontend  ->  Supabase Edge Function "quiet-reader"  ->  Supabase Postgres (schema quiet_reader)
+```
+
+The same API code runs in both places: `src/http/app.ts` is a standard fetch handler, `src/server.ts` serves it on Node, and `src/edge/supabaseFunction.ts` serves it on Deno. `npm run build:edge` bundles it into `supabase/functions/quiet-reader/bundle.js`.
+
+### 1. Link the project
+
+Create a project at [supabase.com](https://supabase.com), then from the repository root:
+
+```bash
+npx supabase login
+npx supabase link --project-ref <your-project-ref>
+```
+
+The project ref is the `xxxx` in `https://xxxx.supabase.co`.
+
+### 2. Create the tables
+
+```bash
+npx supabase db push
+```
+
+This applies `supabase/migrations/`. The tables live in a separate `quiet_reader` schema with row level security on and no policies, so the public Supabase REST API cannot read them; only the Edge Function can.
+
+### 3. Set secrets
+
+```bash
+npx supabase secrets set LLM_PROVIDER=deepseek ALLOWED_ORIGIN=https://your-frontend-domain.vercel.app
+```
+
+Leave `DEEPSEEK_API_KEY` unset so readers use their own key. Any variable from `.env.cloud.example` works here except `DATABASE_URL` and `PORT`: Supabase gives the function `SUPABASE_DB_URL` automatically.
+
+### 4. Deploy the function
+
+```bash
+npm install
+npm run deploy:supabase
+```
+
+Check it:
+
+```bash
+curl https://<your-project-ref>.supabase.co/functions/v1/quiet-reader/health
+```
+
+### 5. Point the frontend at it
+
+In Vercel, set:
+
+```env
+VITE_API_BASE_URL=https://<your-project-ref>.supabase.co/functions/v1/quiet-reader
+```
+
+and redeploy the frontend.
+
+### Supabase limits to know
+
+- Edge Functions get about 2 seconds of CPU time per request (waiting on the LLM does not count). Parsing a typical novel-length EPUB takes well under that, but very large files may fail; lower `MAX_UPLOAD_BYTES` if needed.
+- Rate limiting and the active provider switch are kept in memory per function instance, so they are looser than on a single Node server.
+
+### Running the Node server against Supabase Postgres
+
+Set `DATABASE_URL` to your Supabase connection string (Project Settings → Database → Connection string, transaction pooler). Any `postgres://` URL makes `npm run start` use Postgres instead of SQLite.
+
+---
+
+## Quick Cloud Deploy (Railway)
 
 The simplest deployment path is:
 
@@ -327,7 +401,7 @@ Then open the Vercel URL and upload a small `.txt` file to test the full flow.
 
 Quiet Reader parses uploaded books on the backend and stores parsed book/chapter data plus cached agent outputs in SQLite. If you deploy this publicly, review your storage policy and only upload content you have the right to process.
 
-For a production app with user accounts or long-term libraries, consider replacing SQLite with Postgres and adding authentication.
+On Supabase the same data goes to Supabase Postgres instead. For a production app with user accounts or long-term libraries, consider adding authentication.
 
 ---
 
@@ -335,7 +409,7 @@ For a production app with user accounts or long-term libraries, consider replaci
 
 - Do not commit `.env`, local SQLite databases, `node_modules`, or build output.
 - `.env.example` is for local development.
-- `.env.cloud.example` is a deployment template; put real secrets in Railway/Vercel dashboards, not in Git.
+- `.env.cloud.example` is a deployment template; put real secrets in Railway/Vercel/Supabase dashboards, not in Git.
 - The `mock` provider is useful for UI testing and demos without LLM cost.
 
 ---

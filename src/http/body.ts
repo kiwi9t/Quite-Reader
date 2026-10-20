@@ -1,34 +1,49 @@
-import * as http from "node:http";
+import { Buffer } from "node:buffer";
 import { ApiError } from "./apiError";
 
 export async function readBodyWithLimit(
-  req: http.IncomingMessage,
+  request: Request,
   maxBytes: number
 ): Promise<Buffer> {
+  const declaredBytes = Number(request.headers.get("content-length"));
+
+  if (Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
+    throw bodyTooLarge(maxBytes);
+  }
+
+  if (!request.body) {
+    return Buffer.alloc(0);
+  }
+
+  const reader = request.body.getReader();
   const chunks: Buffer[] = [];
   let totalBytes = 0;
 
-  for await (const chunk of req) {
-    const buffer = Buffer.from(chunk);
-    totalBytes += buffer.length;
+  while (true) {
+    const { done, value } = await reader.read();
 
-    if (totalBytes > maxBytes) {
-      throw new ApiError(413, "BODY_TOO_LARGE", "Request body is too large.", {
-        maxBytes,
-      });
+    if (done) {
+      break;
     }
 
-    chunks.push(buffer);
+    totalBytes += value.byteLength;
+
+    if (totalBytes > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw bodyTooLarge(maxBytes);
+    }
+
+    chunks.push(Buffer.from(value));
   }
 
   return Buffer.concat(chunks);
 }
 
 export async function readJsonBodyWithLimit<T>(
-  req: http.IncomingMessage,
+  request: Request,
   maxBytes: number
 ): Promise<T> {
-  const body = await readBodyWithLimit(req, maxBytes);
+  const body = await readBodyWithLimit(request, maxBytes);
   const rawBody = body.toString("utf-8");
 
   if (!rawBody.trim()) {
@@ -36,4 +51,10 @@ export async function readJsonBodyWithLimit<T>(
   }
 
   return JSON.parse(rawBody) as T;
+}
+
+function bodyTooLarge(maxBytes: number): ApiError {
+  return new ApiError(413, "BODY_TOO_LARGE", "Request body is too large.", {
+    maxBytes,
+  });
 }

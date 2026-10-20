@@ -1,6 +1,3 @@
-import * as http from "node:http";
-import { randomUUID } from "node:crypto";
-
 export interface RequestContext {
   requestId: string;
   method: string;
@@ -10,15 +7,15 @@ export interface RequestContext {
 }
 
 export function createRequestId(): string {
-  return `req_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
+  return `req_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
 }
 
-export function getClientIp(req: http.IncomingMessage): string {
-  const forwardedFor = req.headers["x-forwarded-for"];
+export function getClientIp(request: Request, remoteAddress?: string): string {
+  const forwardedFor = request.headers.get("x-forwarded-for");
 
-  if (typeof forwardedFor === "string" && forwardedFor.trim()) {
-    return forwardedFor.split(",")[0]?.trim() ?? "unknown";
+  if (forwardedFor?.trim()) {
+    return forwardedFor.split(",")[0]?.trim() || "unknown";
   }
 
-  return req.socket.remoteAddress ?? "unknown";
+  return remoteAddress ?? "unknown";
 }

@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import { createRequire } from "node:module";
 import * as path from "node:path";
-import { loadEnvFile } from "../config/env";
+import { isPostgresUrl, loadEnvFile } from "../config/env";
 
 const require = createRequire(import.meta.url);
 const Database = require("better-sqlite3") as new (filename: string) => {
@@ -13,6 +13,13 @@ loadEnvFile();
 
 const databaseUrl =
   process.env.DATABASE_URL ?? `file:${path.resolve("prisma/dev.db")}`;
+
+if (isPostgresUrl(databaseUrl)) {
+  // Postgres tables come from supabase/migrations, not from this script.
+  // Postgres 表由 supabase/migrations 创建，不由本脚本创建。
+  console.log("DATABASE_URL is Postgres; skipping SQLite schema setup.");
+  process.exit(0);
+}
 const databasePath = databaseUrl.replace(/^file:/, "");
 
 fs.mkdirSync(path.dirname(databasePath), { recursive: true });

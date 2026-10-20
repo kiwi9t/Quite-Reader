@@ -4,12 +4,22 @@ import * as path from "node:path";
 let loaded = false;
 
 export function loadEnvFile(filePath = path.resolve(process.cwd(), ".env")) {
-  if (loaded || !fs.existsSync(filePath)) {
-    loaded = true;
+  if (loaded) {
     return;
   }
 
-  const envText = fs.readFileSync(filePath, "utf-8");
+  loaded = true;
+
+  let envText: string;
+
+  try {
+    envText = fs.readFileSync(filePath, "utf-8");
+  } catch {
+    // No .env file, or no filesystem access (Supabase Edge Functions read
+    // their secrets from the environment instead).
+    // 没有 .env 文件，或无文件系统权限（Supabase Edge Functions 直接从环境变量读取密钥）。
+    return;
+  }
 
   for (const line of envText.split(/\r?\n/)) {
     const trimmed = line.trim();
@@ -32,13 +42,15 @@ export function loadEnvFile(filePath = path.resolve(process.cwd(), ".env")) {
       process.env[key] = value;
     }
   }
-
-  loaded = true;
 }
 
 export function getEnv(name: string): string | undefined {
   const value = process.env[name];
   return value && value.trim() ? value.trim() : undefined;
+}
+
+export function isPostgresUrl(url: string): boolean {
+  return /^postgres(ql)?:\/\//i.test(url);
 }
 
 export function requireEnv(name: string): string {
