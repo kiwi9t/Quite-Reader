@@ -15,9 +15,11 @@ import {
 } from "./http/requestContext";
 import {
   createAllAvailableClients,
+  createDeepSeekLLM,
   normalizeProvider,
   type LLMProvider,
 } from "./llm/createLLMClient";
+import { withTimeout } from "./llm/guardedLLM";
 import {
   findCachedParsedBook,
   getCacheStats,
@@ -49,6 +51,16 @@ const MAX_UPLOAD_BYTES = readPositiveIntEnv(
   20 * 1024 * 1024
 );
 
+/**
+ * Header carrying the end user's own DeepSeek API key.
+ * The key is used for that request only: never logged, cached, or stored.
+ *
+ * 携带终端用户自己 DeepSeek API key 的请求头。
+ * 只用于当次请求：不记录日志、不缓存、不落库。
+ */
+const USER_DEEPSEEK_KEY_HEADER = "X-DeepSeek-Api-Key";
+const USER_API_KEY_PATTERN = /^[A-Za-z0-9._-]{8,256}$/;
+
 const rateLimiter = new InMemoryRateLimiter({
   maxRequests: readPositiveIntEnv("RATE_LIMIT_MAX_REQUESTS", 60),
   windowMs: readPositiveIntEnv("RATE_LIMIT_WINDOW_MS", 60_000),
@@ -79,7 +91,7 @@ function sendJson(
     "Content-Type": "application/json; charset=utf-8",
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": `Content-Type, ${USER_DEEPSEEK_KEY_HEADER}`,
     "Vary": "Origin",
     ...headers,
   });
@@ -171,6 +183,7 @@ const server = http.createServer(async (req, res) => {
             default: allClients.defaultProvider,
             active: activeProvider,
             available: allClients.availableProviders,
+            userKeyProviders: allClients.userKeyProviders,
           },
         },
         { "X-Request-Id": context.requestId }
@@ -219,6 +232,38 @@ const server = http.createServer(async (req, res) => {
             availableProviders: allClients.availableProviders,
           },
         },
+        { "X-Request-Id": context.requestId }
+      );
+      return;
+    }
+
+    /**
+     * POST /api/providers/deepseek/verify
+     *
+     * Checks the user's DeepSeek key (sent in X-DeepSeek-Api-Key) against
+     * DeepSeek's balance endpoint. No tokens are consumed.
+     *
+     * 用 DeepSeek 余额接口校验用户的 key（放在 X-DeepSeek-Api-Key 头里），不消耗 token。
+     */
+    if (req.method === "POST" && pathname === "/api/providers/deepseek/verify") {
+      const userApiKey = readUserApiKey(req);
+      if (!userApiKey) {
+        throw new ApiError(
+          400,
+          "VALIDATION_ERROR",
+          `Send your DeepSeek API key in the ${USER_DEEPSEEK_KEY_HEADER} header.`
+        );
+      }
+
+      const status = await withTimeout(
+        (signal) => createDeepSeekLLM(userApiKey).checkKey({ signal }),
+        readPositiveIntEnv("LLM_TIMEOUT_MS", 45_000)
+      );
+
+      sendJson(
+        res,
+        200,
+        { ok: true, data: status },
         { "X-Request-Id": context.requestId }
       );
       return;
@@ -277,13 +322,21 @@ const server = http.createServer(async (req, res) => {
         ? normalizeProvider(requestedProviderRaw)
         : activeProvider;
 
-      const llmClient = allClients.get(requestedProvider);
+      // A user-supplied key takes priority over the server's own key.
+      // 用户自带的 key 优先于服务器 .env 中的 key。
+      const userApiKey = readUserApiKey(req);
+      const llmClient = userApiKey
+        ? allClients.withUserApiKey(requestedProvider, userApiKey)
+        : allClients.get(requestedProvider);
       if (!llmClient) {
         throw new ApiError(
           400,
           "BAD_REQUEST",
-          `Provider "${requestedProvider}" is not configured on this server. ` +
-            `Add ${requestedProvider.toUpperCase()}_API_KEY to .env and restart.`
+          userApiKey
+            ? `Provider "${requestedProvider}" does not accept a user-supplied API key.`
+            : `Provider "${requestedProvider}" needs an API key. ` +
+                `Enter your own key in the app, or add ` +
+                `${requestedProvider.toUpperCase()}_API_KEY to the server .env.`
         );
       }
 
@@ -399,6 +452,29 @@ function readPositiveIntEnv(name: string, fallback: number): number {
   return Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
+/**
+ * Read and validate the user-supplied DeepSeek key header, if any.
+ * 读取并校验用户提供的 DeepSeek key 请求头（如有）。
+ */
+function readUserApiKey(req: http.IncomingMessage): string | undefined {
+  const raw = req.headers[USER_DEEPSEEK_KEY_HEADER.toLowerCase()];
+  const value = (Array.isArray(raw) ? raw[0] : raw)?.trim();
+
+  if (!value) {
+    return undefined;
+  }
+
+  if (!USER_API_KEY_PATTERN.test(value)) {
+    throw new ApiError(
+      400,
+      "VALIDATION_ERROR",
+      "The DeepSeek API key format looks invalid."
+    );
+  }
+
+  return value;
+}
+
 function parseProvider(value: unknown): LLMProvider {
   if (typeof value !== "string") {
     throw new ApiError(400, "VALIDATION_ERROR", "Provider is required.");
@@ -420,5 +496,6 @@ function sanitizeErrorMessage(error: unknown): string | undefined {
   return error.message
     .replace(/Bearer\s+[A-Za-z0-9._-]+/g, "Bearer [REDACTED]")
     .replace(/key=([A-Za-z0-9._-]+)/gi, "key=[REDACTED]")
+    .replace(/sk-[A-Za-z0-9]{6,}/g, "sk-[REDACTED]")
     .slice(0, 500);
 }

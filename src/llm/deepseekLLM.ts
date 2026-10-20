@@ -29,6 +29,23 @@ interface ChatCompletionResponseBody {
   };
 }
 
+interface BalanceResponseBody {
+  is_available?: boolean;
+  balance_infos?: Array<{
+    currency?: string;
+    total_balance?: string;
+  }>;
+  error?: {
+    message?: string;
+  };
+}
+
+export interface DeepSeekKeyStatus {
+  /** Whether the account currently has enough balance to make API calls. */
+  isAvailable: boolean;
+  balances: Array<{ currency: string; totalBalance: string }>;
+}
+
 export class DeepSeekLLM implements MinimalLLMClient {
   private readonly baseUrl: string;
 
@@ -56,7 +73,7 @@ export class DeepSeekLLM implements MinimalLLMClient {
       }),
     });
 
-    const body = (await response.json()) as ChatCompletionResponseBody;
+    const body = await readJsonSafely<ChatCompletionResponseBody>(response);
 
     if (response.status === 429) {
       const retryAfterRaw = response.headers.get("Retry-After");
@@ -80,5 +97,55 @@ export class DeepSeekLLM implements MinimalLLMClient {
     }
 
     return { content };
+  }
+
+  /**
+   * Check that the API key is accepted, using the balance endpoint.
+   * This does not consume tokens.
+   *
+   * 通过余额接口检查 API key 是否有效，不消耗 token。
+   */
+  async checkKey(options: LLMInvokeOptions = {}): Promise<DeepSeekKeyStatus> {
+    const response = await fetch(`${this.baseUrl}/user/balance`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${this.options.apiKey}`,
+        Accept: "application/json",
+      },
+      signal: options.signal,
+    });
+
+    const body = await readJsonSafely<BalanceResponseBody>(response);
+
+    if (!response.ok) {
+      throw new Error(
+        `DeepSeek request failed (${response.status}): ${
+          body.error?.message ?? response.statusText
+        }`
+      );
+    }
+
+    return {
+      isAvailable: body.is_available === true,
+      balances: (body.balance_infos ?? []).map((info) => ({
+        currency: info.currency ?? "",
+        totalBalance: info.total_balance ?? "",
+      })),
+    };
+  }
+}
+
+/**
+ * Parse a JSON body without throwing on HTML/empty error pages,
+ * so a non-JSON 401/502 is reported as a provider error, not a bad request.
+ *
+ * 解析 JSON body，遇到 HTML / 空错误页不抛异常，
+ * 避免非 JSON 的 401/502 被误报为请求体错误。
+ */
+async function readJsonSafely<T extends object>(response: Response): Promise<Partial<T>> {
+  try {
+    return (await response.json()) as Partial<T>;
+  } catch {
+    return {};
   }
 }

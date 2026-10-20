@@ -27,6 +27,16 @@ export interface AvailableClients {
   availableProviders: LLMProvider[];
   /** Look up a ready-to-use client by provider name. */
   get(provider: LLMProvider): MinimalLLMClient | undefined;
+  /** Providers that accept an API key supplied by the end user per request. */
+  userKeyProviders: LLMProvider[];
+  /**
+   * Build a one-off client that uses the end user's own API key.
+   * Returns undefined for providers that do not support user-supplied keys.
+   *
+   * 用终端用户自己提供的 API key 构建一次性客户端。
+   * 不支持用户自带 key 的 provider 返回 undefined。
+   */
+  withUserApiKey(provider: LLMProvider, apiKey: string): MinimalLLMClient | undefined;
 }
 
 /**
@@ -66,14 +76,7 @@ export function createAllAvailableClients(): AvailableClients {
   if (deepseekKey) {
     clientMap.set(
       "deepseek",
-      withLLMGuards(
-        new DeepSeekLLM({
-          apiKey: deepseekKey,
-          model: getEnv("DEEPSEEK_MODEL") ?? "deepseek-v4-flash",
-          baseUrl: getEnv("DEEPSEEK_BASE_URL") ?? "https://api.deepseek.com",
-        }),
-        { timeoutMs, maxPromptChars }
-      )
+      withLLMGuards(createDeepSeekLLM(deepseekKey), { timeoutMs, maxPromptChars })
     );
   }
 
@@ -97,7 +100,27 @@ export function createAllAvailableClients(): AvailableClients {
     get(provider: LLMProvider) {
       return clientMap.get(provider);
     },
+    userKeyProviders: ["deepseek"],
+    withUserApiKey(provider: LLMProvider, apiKey: string) {
+      if (provider !== "deepseek") return undefined;
+      return withLLMGuards(createDeepSeekLLM(apiKey), { timeoutMs, maxPromptChars });
+    },
   };
+}
+
+/**
+ * DeepSeek client using the configured model/base URL and the given key.
+ * The key may come from .env or from the end user.
+ *
+ * 使用配置的模型 / base URL 和给定 key 创建 DeepSeek 客户端。
+ * key 可能来自 .env，也可能来自终端用户。
+ */
+export function createDeepSeekLLM(apiKey: string): DeepSeekLLM {
+  return new DeepSeekLLM({
+    apiKey,
+    model: getEnv("DEEPSEEK_MODEL") ?? "deepseek-v4-flash",
+    baseUrl: getEnv("DEEPSEEK_BASE_URL") ?? "https://api.deepseek.com",
+  });
 }
 
 /**

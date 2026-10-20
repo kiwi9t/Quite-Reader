@@ -4,6 +4,7 @@ export type ApiErrorCode =
   | "BAD_REQUEST"
   | "BODY_TOO_LARGE"
   | "INTERNAL_ERROR"
+  | "LLM_AUTH_ERROR"
   | "LLM_BILLING_ERROR"
   | "LLM_OUTPUT_ERROR"
   | "LLM_PROVIDER_ERROR"
@@ -89,6 +90,7 @@ export function toApiError(error: unknown): ApiError {
     const safeDetail = error.message
       .replace(/Bearer\s+[A-Za-z0-9._-]+/g, "Bearer [REDACTED]")
       .replace(/key=([A-Za-z0-9._-]+)/gi, "key=[REDACTED]")
+      .replace(/sk-[A-Za-z0-9]{6,}/g, "sk-[REDACTED]")
       .slice(0, 300);
 
     if (httpStatus === 429) {
@@ -102,6 +104,18 @@ export function toApiError(error: unknown): ApiError {
         {
           httpStatus,
           retryAfterSec,
+          detail: safeDetail,
+        }
+      );
+    }
+
+    if (httpStatus === 401 || httpStatus === 403) {
+      return new ApiError(
+        401,
+        "LLM_AUTH_ERROR",
+        "The language model provider rejected the API key.",
+        {
+          httpStatus,
           detail: safeDetail,
         }
       );
