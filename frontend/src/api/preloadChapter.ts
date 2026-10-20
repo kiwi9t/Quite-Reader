@@ -1,4 +1,5 @@
 import { requestJson } from "./client";
+import { USER_DEEPSEEK_KEY_HEADER } from "./providers";
 import type {
   ReadingPreloadRequest,
   ReadingPreloadViewModel,
@@ -38,7 +39,7 @@ type LegacyReadingPreloadOutput = {
 
 export async function preloadChapter(
   payload: ReadingPreloadRequest,
-  options: { cache?: boolean; provider?: string } = {}
+  options: { cache?: boolean; provider?: string; deepseekApiKey?: string } = {}
 ): Promise<ReadingPreloadViewModel> {
   const qs = new URLSearchParams();
   if (options.cache === false) qs.set("cache", "false");
@@ -57,6 +58,9 @@ export async function preloadChapter(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...(options.provider === "deepseek" && options.deepseekApiKey
+          ? { [USER_DEEPSEEK_KEY_HEADER]: options.deepseekApiKey }
+          : {}),
       },
       body: JSON.stringify(payload),
     }

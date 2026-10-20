@@ -25,6 +25,7 @@ Quiet Reader tries to move that friction before the reading session. Instead of 
 - Adapt explanations to the reader's level, test score, and self-reported difficulties
 - Cache parsed books and agent outputs with SQLite + Prisma
 - Switch between `mock`, OpenAI, Gemini, and DeepSeek providers
+- Readers can bring their own DeepSeek API key (stored only in their browser)
 - React/Vite frontend with a TypeScript Node API backend
 
 ---
@@ -134,6 +135,8 @@ PORT=3000
 
 To use a real provider, set `LLM_PROVIDER` to `openai`, `gemini`, or `deepseek`, then add the matching API key.
 
+DeepSeek can also run without a server key: pick DeepSeek in the app and enter your own API key. See [Bring your own DeepSeek key](#bring-your-own-deepseek-key).
+
 ### 3. Initialize SQLite
 
 ```bash
@@ -236,10 +239,32 @@ npm --prefix frontend run preview   # Preview production build locally
 | `GET` | `/health` | Check API health and configured LLM providers |
 | `GET` | `/api/providers` | List available LLM providers |
 | `POST` | `/api/providers/active` | Change the default provider for the running server |
+| `POST` | `/api/providers/deepseek/verify` | Check the reader's DeepSeek key (balance endpoint, no tokens used) |
 | `GET` | `/api/limits` | Return upload, body, and rate limits |
 | `GET` | `/api/cache/stats` | Return cache statistics |
 | `POST` | `/api/book/upload?filename=<name>` | Upload and parse a book file |
 | `POST` | `/api/reading/preload?provider=<provider>` | Generate vocabulary cards and spoiler-safe preview |
+
+---
+
+## Bring Your Own DeepSeek Key
+
+Readers can use their own DeepSeek account instead of the server owner's:
+
+1. Choose **DeepSeek** in the setup screen.
+2. Paste a key from [platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys), then **Save**. **Test key** checks it against DeepSeek's balance endpoint without spending tokens.
+3. Generate a preview as usual.
+
+How the key is handled:
+
+- It is stored only in the reader's browser: `sessionStorage` by default (cleared when the tab closes), or `localStorage` if "remember on this device" is ticked.
+- It is sent to the backend in the `X-DeepSeek-Api-Key` header with each preview request, used for that request's DeepSeek calls, and not logged, cached, or written to the database.
+- A user key takes priority over `DEEPSEEK_API_KEY`. If the server has no key and the reader has not entered one, DeepSeek requests are rejected.
+- Serve the frontend and backend over HTTPS in production so the key is encrypted in transit.
+
+On a public deployment, leave `DEEPSEEK_API_KEY` unset so every reader pays with their own key.
+
+Choosing a provider in the app is now per browser (sent as `?provider=` with each request); it no longer changes the server default for other readers.
 
 ---
 
