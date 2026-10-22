@@ -21,3 +21,7 @@ prisma/dev.db-*
 frontend/node_modules/
 frontend/dist/
 frontend/tsconfig.tsbuildinfo
+
+# Supabase CLI state
+supabase/.temp/
+supabase/.branches/

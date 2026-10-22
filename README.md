@@ -23,7 +23,7 @@ Quiet Reader tries to move that friction before the reading session. Instead of 
 - Generate personalized vocabulary cards from chapter context
 - Provide spoiler-safe background knowledge for the current chapter
 - Adapt explanations to the reader's level, test score, and self-reported difficulties
-- Cache parsed books and agent outputs with SQLite + Prisma
+- Cache parsed books and agent outputs with SQLite + Prisma locally, or Postgres (e.g. Supabase) via `DATABASE_URL`
 - Switch between `mock`, OpenAI, Gemini, and DeepSeek providers
 - Readers can bring their own DeepSeek API key (stored only in their browser)
 - React/Vite frontend with a TypeScript Node API backend
@@ -73,7 +73,7 @@ The backend stores reusable results in SQLite. Repeated requests for the same ch
 
 - **Frontend:** React, Vite, TypeScript
 - **Backend:** Node.js, TypeScript, native HTTP server
-- **Database/cache:** SQLite, Prisma, `better-sqlite3`
+- **Database/cache:** SQLite, Prisma, `better-sqlite3` (local); Postgres via `postgres` (e.g. Supabase)
 - **Validation:** Zod
 - **LLM providers:** mock, OpenAI, Gemini, DeepSeek
 - **Book ingestion:** EPUB, TXT, Markdown
@@ -90,13 +90,14 @@ The backend stores reusable results in SQLite. Repeated requests for the same ch
 │   ├── http/            # Request parsing, errors, logging, rate limiting
 │   ├── ingestion/       # EPUB/TXT/Markdown parsing
 │   ├── llm/             # Provider clients and structured output helpers
-│   ├── persistence/     # Prisma client and cache repository
+│   ├── persistence/     # Cache repository, SQLite (Prisma) and Postgres stores
 │   ├── presenters/      # API response shaping
 │   ├── schemas/         # Zod schemas
 │   ├── workflow/        # Workflow orchestration
 │   └── server.ts        # API entry point
 ├── frontend/            # React/Vite web app
-├── prisma/              # Prisma schema
+├── prisma/              # Prisma schema (local SQLite)
+├── supabase/            # Postgres migrations (used with Supabase)
 ├── .env.example         # Local environment template
 ├── .env.cloud.example   # Cloud deployment environment template
 ├── railway.json         # Railway backend deployment config
@@ -268,6 +269,45 @@ Choosing a provider in the app is now per browser (sent as `?provider=` with eac
 
 ---
 
+## Store Data in Supabase Postgres
+
+The backend can keep its cache (parsed books and agent outputs) in Supabase Postgres instead of a SQLite file. The backend itself stays on Railway, so it no longer needs a Railway Volume.
+
+```text
+Vercel frontend  ->  Railway backend (Node)  ->  Supabase Postgres (schema quiet_reader)
+```
+
+Any `postgres://` `DATABASE_URL` switches the backend to Postgres. On every start, `npm run start` creates the tables from `supabase/migrations/` if they are missing. You don't need the Supabase CLI.
+
+### 1. Get the connection string
+
+1. Create a project at [supabase.com](https://supabase.com).
+2. Click **Connect** at the top of the project dashboard.
+3. Copy the **Session pooler** connection string. Railway cannot reach the IPv6-only direct connection.
+4. Replace `[YOUR-PASSWORD]` with the database password. URL-encode special characters, for example `@` becomes `%40`.
+
+It looks like:
+
+```env
+DATABASE_URL="postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres"
+```
+
+### 2. Set it on Railway
+
+In the Railway service's **Variables**, set `DATABASE_URL` to that string and redeploy. The deploy log should show:
+
+```text
+Applied Postgres migration 20261020000000_quiet_reader_cache.sql
+```
+
+After that, check `/api/cache/stats` on the backend: it now counts the rows in Supabase. You can detach the old Railway Volume. The old SQLite cache is not copied over; it rebuilds as readers use the app.
+
+The tables live in a separate `quiet_reader` schema with row level security on and no policies, so the public Supabase REST API cannot read them. Only the backend can, because it connects with the database password.
+
+Remote hosts use TLS by default. Add `?sslmode=...` to the URL to override that.
+
+---
+
 ## Quick Cloud Deploy
 
 The simplest deployment path is:
@@ -327,7 +367,7 @@ Then open the Vercel URL and upload a small `.txt` file to test the full flow.
 
 Quiet Reader parses uploaded books on the backend and stores parsed book/chapter data plus cached agent outputs in SQLite. If you deploy this publicly, review your storage policy and only upload content you have the right to process.
 
-For a production app with user accounts or long-term libraries, consider replacing SQLite with Postgres and adding authentication.
+With a Supabase `DATABASE_URL` the same data goes to Supabase Postgres instead. For a production app with user accounts or long-term libraries, consider adding authentication.
 
 ---
 

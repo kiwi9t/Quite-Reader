@@ -41,6 +41,10 @@ export function getEnv(name: string): string | undefined {
   return value && value.trim() ? value.trim() : undefined;
 }
 
+export function isPostgresUrl(url: string): boolean {
+  return /^postgres(ql)?:\/\//i.test(url);
+}
+
 export function requireEnv(name: string): string {
   const value = getEnv(name);
 

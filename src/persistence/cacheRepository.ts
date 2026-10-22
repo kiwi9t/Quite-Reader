@@ -12,43 +12,13 @@ import {
   NonSpoilerContextResultSchema,
   UserProfileSchema,
 } from "../schemas/readingSchemas";
+import { getCacheStore, type CacheStats, type StoredChapter } from "./cacheStore";
 import { hashBuffer, hashJson, stableStringify } from "./hash";
-import { prisma } from "./prisma";
 
-export interface CacheStats {
-  userProfiles: number;
-  books: number;
-  chapters: number;
-  chapterAnalyses: number;
-  nonSpoilerContexts: number;
-  readingProgressRecords: number;
-}
+export type { CacheStats };
 
 export async function getCacheStats(): Promise<CacheStats> {
-  const [
-    userProfiles,
-    books,
-    chapters,
-    chapterAnalyses,
-    nonSpoilerContexts,
-    readingProgressRecords,
-  ] = await Promise.all([
-    prisma.userProfileCache.count(),
-    prisma.book.count(),
-    prisma.chapter.count(),
-    prisma.chapterAnalysisCache.count(),
-    prisma.nonSpoilerContextCache.count(),
-    prisma.readingProgressRecord.count(),
-  ]);
-
-  return {
-    userProfiles,
-    books,
-    chapters,
-    chapterAnalyses,
-    nonSpoilerContexts,
-    readingProgressRecords,
-  };
+  return (await getCacheStore()).getStats();
 }
 
 export function getUserInputHash(userInput: UserInput): string {
@@ -76,15 +46,13 @@ export function getBookContentHash(buffer: Buffer): string {
 export async function findCachedUserProfile(
   userInputHash: string
 ): Promise<UserProfile | null> {
-  const cached = await prisma.userProfileCache.findUnique({
-    where: { userInputHash },
-  });
+  const profileJson = await (await getCacheStore()).findUserProfileJson(userInputHash);
 
-  if (!cached) {
+  if (!profileJson) {
     return null;
   }
 
-  return UserProfileSchema.parse(JSON.parse(cached.profileJson));
+  return UserProfileSchema.parse(JSON.parse(profileJson));
 }
 
 export async function saveUserProfileCache(params: {
@@ -92,17 +60,10 @@ export async function saveUserProfileCache(params: {
   userInput: UserInput;
   userProfile: UserProfile;
 }): Promise<void> {
-  await prisma.userProfileCache.upsert({
-    where: { userInputHash: params.userInputHash },
-    create: {
-      userInputHash: params.userInputHash,
-      userInputJson: stableStringify(params.userInput),
-      profileJson: stableStringify(params.userProfile),
-    },
-    update: {
-      userInputJson: stableStringify(params.userInput),
-      profileJson: stableStringify(params.userProfile),
-    },
+  await (await getCacheStore()).saveUserProfile({
+    userInputHash: params.userInputHash,
+    userInputJson: stableStringify(params.userInput),
+    profileJson: stableStringify(params.userProfile),
   });
 }
 
@@ -110,17 +71,13 @@ export async function findCachedChapterAnalysis(params: {
   chapterHash: string;
   userProfileHash: string;
 }): Promise<ChapterAnalysisResult | null> {
-  const cached = await prisma.chapterAnalysisCache.findUnique({
-    where: {
-      chapterHash_userProfileHash: params,
-    },
-  });
+  const analysisJson = await (await getCacheStore()).findChapterAnalysisJson(params);
 
-  if (!cached) {
+  if (!analysisJson) {
     return null;
   }
 
-  return ChapterAnalysisResultSchema.parse(JSON.parse(cached.analysisJson));
+  return ChapterAnalysisResultSchema.parse(JSON.parse(analysisJson));
 }
 
 export async function saveChapterAnalysisCache(params: {
@@ -128,21 +85,10 @@ export async function saveChapterAnalysisCache(params: {
   userProfileHash: string;
   analysisResult: ChapterAnalysisResult;
 }): Promise<void> {
-  await prisma.chapterAnalysisCache.upsert({
-    where: {
-      chapterHash_userProfileHash: {
-        chapterHash: params.chapterHash,
-        userProfileHash: params.userProfileHash,
-      },
-    },
-    create: {
-      chapterHash: params.chapterHash,
-      userProfileHash: params.userProfileHash,
-      analysisJson: stableStringify(params.analysisResult),
-    },
-    update: {
-      analysisJson: stableStringify(params.analysisResult),
-    },
+  await (await getCacheStore()).saveChapterAnalysis({
+    chapterHash: params.chapterHash,
+    userProfileHash: params.userProfileHash,
+    analysisJson: stableStringify(params.analysisResult),
   });
 }
 
@@ -150,17 +96,13 @@ export async function findCachedNonSpoilerContext(params: {
   chapterHash: string;
   readingProgressHash: string;
 }): Promise<NonSpoilerContextResult | null> {
-  const cached = await prisma.nonSpoilerContextCache.findUnique({
-    where: {
-      chapterHash_readingProgressHash: params,
-    },
-  });
+  const contextJson = await (await getCacheStore()).findNonSpoilerContextJson(params);
 
-  if (!cached) {
+  if (!contextJson) {
     return null;
   }
 
-  return NonSpoilerContextResultSchema.parse(JSON.parse(cached.contextJson));
+  return NonSpoilerContextResultSchema.parse(JSON.parse(contextJson));
 }
 
 export async function saveNonSpoilerContextCache(params: {
@@ -168,21 +110,10 @@ export async function saveNonSpoilerContextCache(params: {
   readingProgressHash: string;
   nonSpoilerContext: NonSpoilerContextResult;
 }): Promise<void> {
-  await prisma.nonSpoilerContextCache.upsert({
-    where: {
-      chapterHash_readingProgressHash: {
-        chapterHash: params.chapterHash,
-        readingProgressHash: params.readingProgressHash,
-      },
-    },
-    create: {
-      chapterHash: params.chapterHash,
-      readingProgressHash: params.readingProgressHash,
-      contextJson: stableStringify(params.nonSpoilerContext),
-    },
-    update: {
-      contextJson: stableStringify(params.nonSpoilerContext),
-    },
+  await (await getCacheStore()).saveNonSpoilerContext({
+    chapterHash: params.chapterHash,
+    readingProgressHash: params.readingProgressHash,
+    contextJson: stableStringify(params.nonSpoilerContext),
   });
 }
 
@@ -191,23 +122,13 @@ export async function saveReadingProgress(
 ): Promise<string> {
   const readingProgressHash = getReadingProgressHash(readingProgress);
 
-  await prisma.readingProgressRecord.upsert({
-    where: { readingProgressHash },
-    create: {
-      readingProgressHash,
-      bookTitle: readingProgress.bookTitle,
-      currentChapterIndex: readingProgress.currentChapterIndex,
-      currentChapterTitle: readingProgress.currentChapterTitle,
-      safePreviousSummary: readingProgress.safePreviousSummary,
-      progressJson: stableStringify(readingProgress),
-    },
-    update: {
-      bookTitle: readingProgress.bookTitle,
-      currentChapterIndex: readingProgress.currentChapterIndex,
-      currentChapterTitle: readingProgress.currentChapterTitle,
-      safePreviousSummary: readingProgress.safePreviousSummary,
-      progressJson: stableStringify(readingProgress),
-    },
+  await (await getCacheStore()).saveReadingProgress({
+    readingProgressHash,
+    bookTitle: readingProgress.bookTitle,
+    currentChapterIndex: readingProgress.currentChapterIndex,
+    currentChapterTitle: readingProgress.currentChapterTitle,
+    safePreviousSummary: readingProgress.safePreviousSummary,
+    progressJson: stableStringify(readingProgress),
   });
 
   return readingProgressHash;
@@ -216,14 +137,7 @@ export async function saveReadingProgress(
 export async function findCachedParsedBook(
   contentHash: string
 ): Promise<ParsedBook | null> {
-  const book = await prisma.book.findUnique({
-    where: { contentHash },
-    include: {
-      chapters: {
-        orderBy: { index: "asc" },
-      },
-    },
-  });
+  const book = await (await getCacheStore()).findBook(contentHash);
 
   if (!book) {
     return null;
@@ -231,7 +145,7 @@ export async function findCachedParsedBook(
 
   return {
     title: book.title,
-    author: book.author ?? undefined,
+    author: book.author,
     sourceType: book.sourceType as ParsedBook["sourceType"],
     chapters: book.chapters.map((chapter) => ({
       id: chapter.sourceId,
@@ -239,7 +153,7 @@ export async function findCachedParsedBook(
       title: chapter.title,
       content: chapter.content,
       wordCount: chapter.wordCount,
-      sourceHref: chapter.sourceHref ?? undefined,
+      sourceHref: chapter.sourceHref,
     })),
     metadata: book.metadataJson
       ? (JSON.parse(book.metadataJson) as Record<string, unknown>)
@@ -252,42 +166,22 @@ export async function saveParsedBookCache(params: {
   filename: string;
   book: ParsedBook;
 }): Promise<void> {
-  await prisma.book.upsert({
-    where: { contentHash: params.contentHash },
-    create: {
-      contentHash: params.contentHash,
-      filename: params.filename,
-      title: params.book.title,
-      author: params.book.author,
-      sourceType: params.book.sourceType,
-      metadataJson: params.book.metadata
-        ? stableStringify(params.book.metadata)
-        : undefined,
-      chapters: {
-        create: params.book.chapters.map((chapter) =>
-          toChapterCreateInput(params.contentHash, chapter)
-        ),
-      },
-    },
-    update: {
-      filename: params.filename,
-      title: params.book.title,
-      author: params.book.author,
-      sourceType: params.book.sourceType,
-      metadataJson: params.book.metadata
-        ? stableStringify(params.book.metadata)
-        : undefined,
-      chapters: {
-        deleteMany: {},
-        create: params.book.chapters.map((chapter) =>
-          toChapterCreateInput(params.contentHash, chapter)
-        ),
-      },
-    },
+  await (await getCacheStore()).saveBook({
+    contentHash: params.contentHash,
+    filename: params.filename,
+    title: params.book.title,
+    author: params.book.author,
+    sourceType: params.book.sourceType,
+    metadataJson: params.book.metadata
+      ? stableStringify(params.book.metadata)
+      : undefined,
+    chapters: params.book.chapters.map((chapter) =>
+      toStoredChapter(params.contentHash, chapter)
+    ),
   });
 }
 
-function toChapterCreateInput(bookHash: string, chapter: ParsedChapter) {
+function toStoredChapter(bookHash: string, chapter: ParsedChapter): StoredChapter {
   return {
     chapterHash: hashJson({
       bookHash,
