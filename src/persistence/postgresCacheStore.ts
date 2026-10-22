@@ -1,25 +1,45 @@
 // src/persistence/postgresCacheStore.ts
 //
-// Postgres cache store (Supabase). Tables live in the `quiet_reader` schema,
-// created by supabase/migrations. Works in Node and in Deno (Edge Functions).
+// Postgres cache store (e.g. Supabase). Tables live in the `quiet_reader`
+// schema, created from supabase/migrations by `npm run db:push`.
 //
-// Postgres 缓存存储（Supabase）。表位于 `quiet_reader` schema，
-// 由 supabase/migrations 创建。可在 Node 和 Deno（Edge Functions）中运行。
+// Postgres 缓存存储（如 Supabase）。表位于 `quiet_reader` schema，
+// 由 `npm run db:push` 根据 supabase/migrations 创建。
 
 import postgres from "postgres";
 
 import type { CacheStore, StoredChapter } from "./cacheStore";
 
-export function createPostgresCacheStore(databaseUrl: string): CacheStore {
-  const sql = postgres(databaseUrl, {
-    // Supabase's transaction pooler does not support prepared statements.
-    // Supabase 的事务模式连接池不支持 prepared statements。
+export function createPostgresClient(databaseUrl: string) {
+  return postgres(databaseUrl, {
+    // Works with both Supabase poolers; the transaction pooler does not
+    // support prepared statements.
+    // 兼容 Supabase 两种连接池；事务模式连接池不支持 prepared statements。
     prepare: false,
-    max: 3,
+    // Use TLS for remote hosts such as Supabase; local databases usually have
+    // none. An explicit ?sslmode= in the URL wins.
+    // 远程主机（如 Supabase）使用 TLS；本地数据库通常没有。URL 中显式的 ?sslmode= 优先。
+    ...(hasSslMode(databaseUrl)
+      ? {}
+      : { ssl: isLocalDatabase(databaseUrl) ? false : "require" }),
+    max: 5,
     idle_timeout: 20,
     connect_timeout: 10,
     onnotice: () => {},
   });
+}
+
+function hasSslMode(databaseUrl: string): boolean {
+  return new URL(databaseUrl).searchParams.has("sslmode");
+}
+
+function isLocalDatabase(databaseUrl: string): boolean {
+  const { hostname } = new URL(databaseUrl);
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+}
+
+export function createPostgresCacheStore(databaseUrl: string): CacheStore {
+  const sql = createPostgresClient(databaseUrl);
 
   return {
     async getStats() {

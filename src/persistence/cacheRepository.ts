@@ -1,5 +1,3 @@
-import type { Buffer } from "node:buffer";
-
 import type {
   ChapterAnalysisResult,
   ChapterInput,
@@ -20,7 +18,7 @@ import { hashBuffer, hashJson, stableStringify } from "./hash";
 export type { CacheStats };
 
 export async function getCacheStats(): Promise<CacheStats> {
-  return getCacheStore().getStats();
+  return (await getCacheStore()).getStats();
 }
 
 export function getUserInputHash(userInput: UserInput): string {
@@ -48,7 +46,7 @@ export function getBookContentHash(buffer: Buffer): string {
 export async function findCachedUserProfile(
   userInputHash: string
 ): Promise<UserProfile | null> {
-  const profileJson = await getCacheStore().findUserProfileJson(userInputHash);
+  const profileJson = await (await getCacheStore()).findUserProfileJson(userInputHash);
 
   if (!profileJson) {
     return null;
@@ -62,7 +60,7 @@ export async function saveUserProfileCache(params: {
   userInput: UserInput;
   userProfile: UserProfile;
 }): Promise<void> {
-  await getCacheStore().saveUserProfile({
+  await (await getCacheStore()).saveUserProfile({
     userInputHash: params.userInputHash,
     userInputJson: stableStringify(params.userInput),
     profileJson: stableStringify(params.userProfile),
@@ -73,7 +71,7 @@ export async function findCachedChapterAnalysis(params: {
   chapterHash: string;
   userProfileHash: string;
 }): Promise<ChapterAnalysisResult | null> {
-  const analysisJson = await getCacheStore().findChapterAnalysisJson(params);
+  const analysisJson = await (await getCacheStore()).findChapterAnalysisJson(params);
 
   if (!analysisJson) {
     return null;
@@ -87,7 +85,7 @@ export async function saveChapterAnalysisCache(params: {
   userProfileHash: string;
   analysisResult: ChapterAnalysisResult;
 }): Promise<void> {
-  await getCacheStore().saveChapterAnalysis({
+  await (await getCacheStore()).saveChapterAnalysis({
     chapterHash: params.chapterHash,
     userProfileHash: params.userProfileHash,
     analysisJson: stableStringify(params.analysisResult),
@@ -98,7 +96,7 @@ export async function findCachedNonSpoilerContext(params: {
   chapterHash: string;
   readingProgressHash: string;
 }): Promise<NonSpoilerContextResult | null> {
-  const contextJson = await getCacheStore().findNonSpoilerContextJson(params);
+  const contextJson = await (await getCacheStore()).findNonSpoilerContextJson(params);
 
   if (!contextJson) {
     return null;
@@ -112,7 +110,7 @@ export async function saveNonSpoilerContextCache(params: {
   readingProgressHash: string;
   nonSpoilerContext: NonSpoilerContextResult;
 }): Promise<void> {
-  await getCacheStore().saveNonSpoilerContext({
+  await (await getCacheStore()).saveNonSpoilerContext({
     chapterHash: params.chapterHash,
     readingProgressHash: params.readingProgressHash,
     contextJson: stableStringify(params.nonSpoilerContext),
@@ -124,7 +122,7 @@ export async function saveReadingProgress(
 ): Promise<string> {
   const readingProgressHash = getReadingProgressHash(readingProgress);
 
-  await getCacheStore().saveReadingProgress({
+  await (await getCacheStore()).saveReadingProgress({
     readingProgressHash,
     bookTitle: readingProgress.bookTitle,
     currentChapterIndex: readingProgress.currentChapterIndex,
@@ -139,7 +137,7 @@ export async function saveReadingProgress(
 export async function findCachedParsedBook(
   contentHash: string
 ): Promise<ParsedBook | null> {
-  const book = await getCacheStore().findBook(contentHash);
+  const book = await (await getCacheStore()).findBook(contentHash);
 
   if (!book) {
     return null;
@@ -168,7 +166,7 @@ export async function saveParsedBookCache(params: {
   filename: string;
   book: ParsedBook;
 }): Promise<void> {
-  await getCacheStore().saveBook({
+  await (await getCacheStore()).saveBook({
     contentHash: params.contentHash,
     filename: params.filename,
     title: params.book.title,

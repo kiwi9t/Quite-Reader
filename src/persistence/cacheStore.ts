@@ -1,10 +1,13 @@
 // src/persistence/cacheStore.ts
 //
-// Storage backend for the cache repository. The Node server picks SQLite
-// (Prisma) or Postgres; the Supabase Edge Function always uses Postgres.
+// Storage backend for the cache repository. DATABASE_URL picks it:
+// a postgres:// URL (e.g. Supabase) uses Postgres, anything else uses the
+// SQLite file through Prisma.
 //
-// 缓存仓库的存储后端。Node 服务器可选 SQLite（Prisma）或 Postgres；
-// Supabase Edge Function 固定使用 Postgres。
+// 缓存仓库的存储后端，由 DATABASE_URL 决定：
+// postgres:// 开头（如 Supabase）使用 Postgres，否则通过 Prisma 使用 SQLite 文件。
+
+import { getEnv, isPostgresUrl, loadEnvFile } from "../config/env";
 
 export interface CacheStats {
   userProfiles: number;
@@ -80,16 +83,24 @@ export interface CacheStore {
   saveBook(book: StoredBook): Promise<void>;
 }
 
-let activeStore: CacheStore | undefined;
+let storePromise: Promise<CacheStore> | undefined;
 
-export function configureCacheStore(store: CacheStore): void {
-  activeStore = store;
+export function getCacheStore(): Promise<CacheStore> {
+  storePromise ??= createCacheStore();
+  return storePromise;
 }
 
-export function getCacheStore(): CacheStore {
-  if (!activeStore) {
-    throw new Error("Cache store is not configured. Call configureCacheStore() at startup.");
+async function createCacheStore(): Promise<CacheStore> {
+  loadEnvFile();
+  const databaseUrl = getEnv("DATABASE_URL");
+
+  if (databaseUrl && isPostgresUrl(databaseUrl)) {
+    const { createPostgresCacheStore } = await import("./postgresCacheStore");
+    return createPostgresCacheStore(databaseUrl);
   }
 
-  return activeStore;
+  // Imported lazily so a Postgres deployment never opens a SQLite file.
+  // 延迟导入，Postgres 部署时不会打开 SQLite 文件。
+  const { createPrismaCacheStore } = await import("./prismaCacheStore");
+  return createPrismaCacheStore();
 }

@@ -8,9 +8,7 @@
     "db:push": "prisma generate && tsx src/persistence/initDb.ts",
     "server": "tsx src/server.ts",
     "start": "npm run db:push && npm run server",
-    "typecheck": "tsc --noEmit",
-    "build:edge": "node scripts/build-edge.mjs",
-    "deploy:supabase": "npm run build:edge && npx supabase functions deploy quiet-reader --no-verify-jwt"
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
@@ -18,7 +16,6 @@
   "type": "commonjs",
   "devDependencies": {
     "@types/node": "^25.9.1",
-    "esbuild": "^0.28.2",
     "prisma": "^7.8.0",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3"

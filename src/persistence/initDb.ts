@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import { createRequire } from "node:module";
 import * as path from "node:path";
 import { isPostgresUrl, loadEnvFile } from "../config/env";
+import { createPostgresClient } from "./postgresCacheStore";
 
 const require = createRequire(import.meta.url);
 const Database = require("better-sqlite3") as new (filename: string) => {
@@ -15,115 +16,148 @@ const databaseUrl =
   process.env.DATABASE_URL ?? `file:${path.resolve("prisma/dev.db")}`;
 
 if (isPostgresUrl(databaseUrl)) {
-  // Postgres tables come from supabase/migrations, not from this script.
-  // Postgres 表由 supabase/migrations 创建，不由本脚本创建。
-  console.log("DATABASE_URL is Postgres; skipping SQLite schema setup.");
-  process.exit(0);
+  void applyPostgresMigrations(databaseUrl).then(
+    () => process.exit(0),
+    (error: unknown) => {
+      console.error(error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  );
+} else {
+  initSqlite(databaseUrl);
 }
-const databasePath = databaseUrl.replace(/^file:/, "");
 
-fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+/**
+ * Apply supabase/migrations/*.sql in order. Every migration is idempotent
+ * (`if not exists`), so running this on each start is safe.
+ *
+ * 按顺序执行 supabase/migrations/*.sql。每个迁移都是幂等的（`if not exists`），
+ * 因此每次启动都执行是安全的。
+ */
+async function applyPostgresMigrations(url: string): Promise<void> {
+  const migrationsDir = path.resolve("supabase/migrations");
+  const files = fs
+    .readdirSync(migrationsDir)
+    .filter((file) => file.endsWith(".sql"))
+    .sort();
+  const sql = createPostgresClient(url);
 
-const db = new Database(databasePath);
+  try {
+    for (const file of files) {
+      await sql.unsafe(fs.readFileSync(path.join(migrationsDir, file), "utf-8"));
+      console.log(`Applied Postgres migration ${file}`);
+    }
+  } finally {
+    await sql.end();
+  }
+}
 
-db.exec(`
-CREATE TABLE IF NOT EXISTS "UserProfileCache" (
-  "id" TEXT NOT NULL PRIMARY KEY,
-  "userInputHash" TEXT NOT NULL,
-  "userInputJson" TEXT NOT NULL,
-  "profileJson" TEXT NOT NULL,
-  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" DATETIME NOT NULL
-);
+function initSqlite(databaseUrl: string): void {
+  const databasePath = databaseUrl.replace(/^file:/, "");
 
-CREATE TABLE IF NOT EXISTS "Book" (
-  "id" TEXT NOT NULL PRIMARY KEY,
-  "contentHash" TEXT NOT NULL,
-  "filename" TEXT NOT NULL,
-  "title" TEXT NOT NULL,
-  "author" TEXT,
-  "sourceType" TEXT NOT NULL,
-  "metadataJson" TEXT,
-  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" DATETIME NOT NULL
-);
+  fs.mkdirSync(path.dirname(databasePath), { recursive: true });
 
-CREATE TABLE IF NOT EXISTS "Chapter" (
-  "id" TEXT NOT NULL PRIMARY KEY,
-  "bookId" TEXT NOT NULL,
-  "chapterHash" TEXT NOT NULL,
-  "sourceId" TEXT NOT NULL,
-  "index" INTEGER NOT NULL,
-  "title" TEXT NOT NULL,
-  "content" TEXT NOT NULL,
-  "wordCount" INTEGER NOT NULL,
-  "sourceHref" TEXT,
-  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" DATETIME NOT NULL,
-  CONSTRAINT "Chapter_bookId_fkey"
-    FOREIGN KEY ("bookId") REFERENCES "Book" ("id")
-    ON DELETE CASCADE ON UPDATE CASCADE
-);
+  const db = new Database(databasePath);
 
-CREATE TABLE IF NOT EXISTS "ChapterAnalysisCache" (
-  "id" TEXT NOT NULL PRIMARY KEY,
-  "chapterHash" TEXT NOT NULL,
-  "userProfileHash" TEXT NOT NULL,
-  "analysisJson" TEXT NOT NULL,
-  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" DATETIME NOT NULL
-);
+  db.exec(`
+  CREATE TABLE IF NOT EXISTS "UserProfileCache" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "userInputHash" TEXT NOT NULL,
+    "userInputJson" TEXT NOT NULL,
+    "profileJson" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+  );
 
-CREATE TABLE IF NOT EXISTS "NonSpoilerContextCache" (
-  "id" TEXT NOT NULL PRIMARY KEY,
-  "chapterHash" TEXT NOT NULL,
-  "readingProgressHash" TEXT NOT NULL,
-  "contextJson" TEXT NOT NULL,
-  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" DATETIME NOT NULL
-);
+  CREATE TABLE IF NOT EXISTS "Book" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "contentHash" TEXT NOT NULL,
+    "filename" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "author" TEXT,
+    "sourceType" TEXT NOT NULL,
+    "metadataJson" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+  );
 
-CREATE TABLE IF NOT EXISTS "ReadingProgressRecord" (
-  "id" TEXT NOT NULL PRIMARY KEY,
-  "readingProgressHash" TEXT NOT NULL,
-  "bookTitle" TEXT NOT NULL,
-  "currentChapterIndex" INTEGER NOT NULL,
-  "currentChapterTitle" TEXT NOT NULL,
-  "safePreviousSummary" TEXT,
-  "progressJson" TEXT NOT NULL,
-  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" DATETIME NOT NULL
-);
+  CREATE TABLE IF NOT EXISTS "Chapter" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "bookId" TEXT NOT NULL,
+    "chapterHash" TEXT NOT NULL,
+    "sourceId" TEXT NOT NULL,
+    "index" INTEGER NOT NULL,
+    "title" TEXT NOT NULL,
+    "content" TEXT NOT NULL,
+    "wordCount" INTEGER NOT NULL,
+    "sourceHref" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "Chapter_bookId_fkey"
+      FOREIGN KEY ("bookId") REFERENCES "Book" ("id")
+      ON DELETE CASCADE ON UPDATE CASCADE
+  );
 
-CREATE UNIQUE INDEX IF NOT EXISTS
-  "UserProfileCache_userInputHash_key"
-  ON "UserProfileCache"("userInputHash");
+  CREATE TABLE IF NOT EXISTS "ChapterAnalysisCache" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "chapterHash" TEXT NOT NULL,
+    "userProfileHash" TEXT NOT NULL,
+    "analysisJson" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+  );
 
-CREATE UNIQUE INDEX IF NOT EXISTS
-  "Book_contentHash_key"
-  ON "Book"("contentHash");
+  CREATE TABLE IF NOT EXISTS "NonSpoilerContextCache" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "chapterHash" TEXT NOT NULL,
+    "readingProgressHash" TEXT NOT NULL,
+    "contextJson" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+  );
 
-CREATE UNIQUE INDEX IF NOT EXISTS
-  "Chapter_chapterHash_key"
-  ON "Chapter"("chapterHash");
+  CREATE TABLE IF NOT EXISTS "ReadingProgressRecord" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "readingProgressHash" TEXT NOT NULL,
+    "bookTitle" TEXT NOT NULL,
+    "currentChapterIndex" INTEGER NOT NULL,
+    "currentChapterTitle" TEXT NOT NULL,
+    "safePreviousSummary" TEXT,
+    "progressJson" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+  );
 
-CREATE UNIQUE INDEX IF NOT EXISTS
-  "Chapter_bookId_index_key"
-  ON "Chapter"("bookId", "index");
+  CREATE UNIQUE INDEX IF NOT EXISTS
+    "UserProfileCache_userInputHash_key"
+    ON "UserProfileCache"("userInputHash");
 
-CREATE UNIQUE INDEX IF NOT EXISTS
-  "ChapterAnalysisCache_chapterHash_userProfileHash_key"
-  ON "ChapterAnalysisCache"("chapterHash", "userProfileHash");
+  CREATE UNIQUE INDEX IF NOT EXISTS
+    "Book_contentHash_key"
+    ON "Book"("contentHash");
 
-CREATE UNIQUE INDEX IF NOT EXISTS
-  "NonSpoilerContextCache_chapterHash_readingProgressHash_key"
-  ON "NonSpoilerContextCache"("chapterHash", "readingProgressHash");
+  CREATE UNIQUE INDEX IF NOT EXISTS
+    "Chapter_chapterHash_key"
+    ON "Chapter"("chapterHash");
 
-CREATE UNIQUE INDEX IF NOT EXISTS
-  "ReadingProgressRecord_readingProgressHash_key"
-  ON "ReadingProgressRecord"("readingProgressHash");
-`);
+  CREATE UNIQUE INDEX IF NOT EXISTS
+    "Chapter_bookId_index_key"
+    ON "Chapter"("bookId", "index");
 
-db.close();
+  CREATE UNIQUE INDEX IF NOT EXISTS
+    "ChapterAnalysisCache_chapterHash_userProfileHash_key"
+    ON "ChapterAnalysisCache"("chapterHash", "userProfileHash");
 
-console.log(`SQLite persistence schema is ready at ${databasePath}`);
+  CREATE UNIQUE INDEX IF NOT EXISTS
+    "NonSpoilerContextCache_chapterHash_readingProgressHash_key"
+    ON "NonSpoilerContextCache"("chapterHash", "readingProgressHash");
+
+  CREATE UNIQUE INDEX IF NOT EXISTS
+    "ReadingProgressRecord_readingProgressHash_key"
+    ON "ReadingProgressRecord"("readingProgressHash");
+  `);
+
+  db.close();
+
+  console.log(`SQLite persistence schema is ready at ${databasePath}`);
+}
