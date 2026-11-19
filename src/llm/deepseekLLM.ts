@@ -53,6 +53,11 @@ export class DeepSeekLLM implements MinimalLLMClient {
           role: m.role,
           content: m.content,
         })),
+        // Every agent asks for one JSON object. JSON mode makes DeepSeek always
+        // return parseable JSON, so we stop paying for full retries caused by
+        // stray Markdown fences or prose around the object.
+        // 所有 Agent 都要求返回 JSON；开启 JSON 模式可避免因格式问题整轮重试。
+        response_format: { type: "json_object" },
       }),
     });
 

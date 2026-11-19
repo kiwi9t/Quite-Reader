@@ -46,7 +46,7 @@ Timeline Isolation Rules:
    - "This is secretly..."
    - "The real reason is..."
 
-6. If a concept cannot be explained safely without future knowledge, skip it and list it in skippedPotentialSpoilers.
+6. If a concept cannot be explained safely without future knowledge, skip it entirely.
 
 7. Character explanations must be limited to what the user can know at the current chapter.
 
@@ -71,7 +71,8 @@ Output requirements:
 - Do not add comments.
 - Write explanations in Chinese.
 - Keep nonSpoilerGuideZh within 300 Chinese characters. Aim for 2-4 concise sentences.
-- Prefer 3-7 contextItems.
+- Prefer 3-5 contextItems. Keep each explanationZh and whyUsefulNow to one or two short sentences.
+- Keep timelineBoundaryNote to one short sentence.
 
 The JSON object must match this shape:
 
@@ -84,12 +85,6 @@ The JSON object must match this shape:
       "explanationZh": string,
       "whyUsefulNow": string,
       "spoilerSafetyConfidence": number
-    }
-  ],
-  "skippedPotentialSpoilers": [
-    {
-      "topic": string,
-      "reason": string
     }
   ],
   "timelineBoundaryNote": string

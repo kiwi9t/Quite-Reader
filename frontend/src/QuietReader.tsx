@@ -1532,6 +1532,14 @@ export default function QuietReader() {
     direction: "previous" | "next" | "toc";
   } | null>(null);
 
+  // In-flight and finished preview requests, keyed by everything that affects
+  // the result. Lets us start the next chapter's preview in the background
+  // while the reader is still on the current one.
+  // 预览请求缓存：阅读当前章时在后台提前生成下一章。
+  const preloadCacheRef = useRef(
+    new Map<string, Promise<ReadingPreloadViewModel>>()
+  );
+
   const selectedChapter = useMemo(
     () => book?.chapters.find((chapter) => chapter.id === selectedChapterId) ?? null,
     [book, selectedChapterId]
@@ -1610,6 +1618,7 @@ export default function QuietReader() {
   };
 
   const handleBook = (nextBook: ParsedBook | null) => {
+    preloadCacheRef.current.clear();
     setBook(nextBook);
     setSelectedChapterId("");
     setPreload(null);
@@ -1658,6 +1667,29 @@ export default function QuietReader() {
       detail: chapter.title,
     });
 
+    const nextPreload = await fetchChapterPreload(chapter);
+    setLastApiStatus({
+      label: "preloadChapter",
+      state: "success",
+      detail: `${nextPreload.previewCards.vocabulary.length} vocab · ${nextPreload.previewCards.context.length} context`,
+    });
+
+    return nextPreload;
+  };
+
+  /**
+   * Request (or reuse) the preview for a chapter without touching UI status.
+   * Failed requests are dropped from the cache so a later click retries.
+   */
+  const fetchChapterPreload = (
+    chapter: ParsedChapter
+  ): Promise<ReadingPreloadViewModel> => {
+    if (!book) {
+      return Promise.reject(
+        new Error("Upload a book before generating a reading preview.")
+      );
+    }
+
     const payload: ReadingPreloadRequest = {
       userInput: {
         testScore: readingLevel,
@@ -1679,17 +1711,44 @@ export default function QuietReader() {
       },
     };
 
-    const nextPreload = await preloadChapter(payload, {
-      provider: selectedProvider,
-    });
-    setLastApiStatus({
-      label: "preloadChapter",
-      state: "success",
-      detail: `${nextPreload.previewCards.vocabulary.length} vocab · ${nextPreload.previewCards.context.length} context`,
-    });
+    const cacheKey = JSON.stringify([selectedProvider, payload]);
+    const cache = preloadCacheRef.current;
+    const existing = cache.get(cacheKey);
+    if (existing) {
+      return existing;
+    }
 
-    return nextPreload;
+    const request = preloadChapter(payload, { provider: selectedProvider });
+    cache.set(cacheKey, request);
+    request.catch(() => {
+      if (cache.get(cacheKey) === request) {
+        cache.delete(cacheKey);
+      }
+    });
+    return request;
   };
+
+  // Once a chapter is open (preview or reader screen), quietly start
+  // generating the next chapter's preview so "next chapter" opens fast.
+  // 打开某章后，在后台悄悄生成下一章的预览。
+  const nextChapter = useMemo(() => {
+    if (!book || !readerChapter) return null;
+    // Same rule as the reader's "Next chapter" button (skips cover, TOC, etc.).
+    const usable = book.chapters.filter(isUsableChapter);
+    const position = usable.findIndex((c) => c.id === readerChapter.id);
+    return position >= 0 ? usable[position + 1] ?? null : null;
+  }, [book, readerChapter]);
+
+  useEffect(() => {
+    if (!nextChapter || (screen !== "preload" && screen !== "reader")) {
+      return;
+    }
+    fetchChapterPreload(nextChapter).catch(() => {
+      // Ignore: the real click will retry and show the error.
+    });
+    // fetchChapterPreload reads the latest settings; re-run only when the
+    // target chapter or the settings that change the request change.
+  }, [nextChapter, screen, selectedProvider, readingLevel, readingDiff, prevSummary]);
 
   const handleReaderChapterSwitch = (chapter: ParsedChapter) => {
     void (async () => {
