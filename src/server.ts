@@ -35,6 +35,7 @@ import {
   runReadingPreloadWorkflow,
   type ReadingPreloadInput,
 } from "./workflow/readingWorkflow";
+import { resolveAllowedOrigin } from "./http/cors";
 
 // Initialize ALL providers that have API keys in .env.
 // This lets the frontend switch providers per-request without restarting.
@@ -73,7 +74,9 @@ function sendJson(
   data: unknown,
   headers: Record<string, string> = {}
 ): void {
-  const allowedOrigin = getEnv("ALLOWED_ORIGIN") ?? "*";
+  const allowedOrigin =
+    (res.getHeader("Access-Control-Allow-Origin") as string | undefined) ??
+    resolveAllowedOrigin(undefined);
 
   res.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
@@ -116,6 +119,11 @@ const server = http.createServer(async (req, res) => {
     startedAt: Date.now(),
     ip: getClientIp(req),
   };
+
+  res.setHeader(
+    "Access-Control-Allow-Origin",
+    resolveAllowedOrigin(req.headers.origin)
+  );
 
   logEvent("info", "request_started", {
     requestId: context.requestId,

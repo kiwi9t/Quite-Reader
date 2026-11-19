@@ -1,13 +1,11 @@
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
-import * as path from "node:path";
-import { loadEnvFile } from "../config/env";
+import { getDatabaseUrl } from "./databaseUrl";
 
-loadEnvFile();
-process.env.DATABASE_URL ??= `file:${path.resolve("prisma/dev.db")}`;
-
-const adapter = new PrismaBetterSqlite3({
-  url: process.env.DATABASE_URL,
+const adapter = new PrismaPg({
+  connectionString: getDatabaseUrl(),
+  // Free-tier Postgres (Supabase pooler) has a small connection limit.
+  max: Number(process.env.DATABASE_POOL_MAX ?? 5),
 });
 
 export const prisma = new PrismaClient({ adapter });

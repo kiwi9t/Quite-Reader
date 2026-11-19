@@ -1,32 +1,24 @@
-import * as fs from "node:fs";
-import { createRequire } from "node:module";
-import * as path from "node:path";
-import { loadEnvFile } from "../config/env";
+import { Client } from "pg";
+import { getDatabaseUrl } from "./databaseUrl";
 
-const require = createRequire(import.meta.url);
-const Database = require("better-sqlite3") as new (filename: string) => {
-  exec(sql: string): void;
-  close(): void;
-};
+// Idempotent schema setup for Postgres (e.g. Supabase). Mirrors prisma/schema.prisma.
+const TABLES = [
+  "UserProfileCache",
+  "Book",
+  "Chapter",
+  "ChapterAnalysisCache",
+  "NonSpoilerContextCache",
+  "ReadingProgressRecord",
+] as const;
 
-loadEnvFile();
-
-const databaseUrl =
-  process.env.DATABASE_URL ?? `file:${path.resolve("prisma/dev.db")}`;
-const databasePath = databaseUrl.replace(/^file:/, "");
-
-fs.mkdirSync(path.dirname(databasePath), { recursive: true });
-
-const db = new Database(databasePath);
-
-db.exec(`
+const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS "UserProfileCache" (
   "id" TEXT NOT NULL PRIMARY KEY,
   "userInputHash" TEXT NOT NULL,
   "userInputJson" TEXT NOT NULL,
   "profileJson" TEXT NOT NULL,
-  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" DATETIME NOT NULL
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS "Book" (
@@ -37,8 +29,8 @@ CREATE TABLE IF NOT EXISTS "Book" (
   "author" TEXT,
   "sourceType" TEXT NOT NULL,
   "metadataJson" TEXT,
-  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" DATETIME NOT NULL
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS "Chapter" (
@@ -51,8 +43,8 @@ CREATE TABLE IF NOT EXISTS "Chapter" (
   "content" TEXT NOT NULL,
   "wordCount" INTEGER NOT NULL,
   "sourceHref" TEXT,
-  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" DATETIME NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
   CONSTRAINT "Chapter_bookId_fkey"
     FOREIGN KEY ("bookId") REFERENCES "Book" ("id")
     ON DELETE CASCADE ON UPDATE CASCADE
@@ -63,8 +55,8 @@ CREATE TABLE IF NOT EXISTS "ChapterAnalysisCache" (
   "chapterHash" TEXT NOT NULL,
   "userProfileHash" TEXT NOT NULL,
   "analysisJson" TEXT NOT NULL,
-  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" DATETIME NOT NULL
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS "NonSpoilerContextCache" (
@@ -72,8 +64,8 @@ CREATE TABLE IF NOT EXISTS "NonSpoilerContextCache" (
   "chapterHash" TEXT NOT NULL,
   "readingProgressHash" TEXT NOT NULL,
   "contextJson" TEXT NOT NULL,
-  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" DATETIME NOT NULL
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS "ReadingProgressRecord" (
@@ -84,39 +76,45 @@ CREATE TABLE IF NOT EXISTS "ReadingProgressRecord" (
   "currentChapterTitle" TEXT NOT NULL,
   "safePreviousSummary" TEXT,
   "progressJson" TEXT NOT NULL,
-  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" DATETIME NOT NULL
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS
-  "UserProfileCache_userInputHash_key"
+CREATE UNIQUE INDEX IF NOT EXISTS "UserProfileCache_userInputHash_key"
   ON "UserProfileCache"("userInputHash");
-
-CREATE UNIQUE INDEX IF NOT EXISTS
-  "Book_contentHash_key"
+CREATE UNIQUE INDEX IF NOT EXISTS "Book_contentHash_key"
   ON "Book"("contentHash");
-
-CREATE UNIQUE INDEX IF NOT EXISTS
-  "Chapter_chapterHash_key"
+CREATE UNIQUE INDEX IF NOT EXISTS "Chapter_chapterHash_key"
   ON "Chapter"("chapterHash");
-
-CREATE UNIQUE INDEX IF NOT EXISTS
-  "Chapter_bookId_index_key"
+CREATE UNIQUE INDEX IF NOT EXISTS "Chapter_bookId_index_key"
   ON "Chapter"("bookId", "index");
-
-CREATE UNIQUE INDEX IF NOT EXISTS
-  "ChapterAnalysisCache_chapterHash_userProfileHash_key"
+CREATE UNIQUE INDEX IF NOT EXISTS "ChapterAnalysisCache_chapterHash_userProfileHash_key"
   ON "ChapterAnalysisCache"("chapterHash", "userProfileHash");
-
-CREATE UNIQUE INDEX IF NOT EXISTS
-  "NonSpoilerContextCache_chapterHash_readingProgressHash_key"
+CREATE UNIQUE INDEX IF NOT EXISTS "NonSpoilerContextCache_chapterHash_readingProgressHash_key"
   ON "NonSpoilerContextCache"("chapterHash", "readingProgressHash");
-
-CREATE UNIQUE INDEX IF NOT EXISTS
-  "ReadingProgressRecord_readingProgressHash_key"
+CREATE UNIQUE INDEX IF NOT EXISTS "ReadingProgressRecord_readingProgressHash_key"
   ON "ReadingProgressRecord"("readingProgressHash");
-`);
 
-db.close();
+-- Row Level Security with no policies: Supabase's anon/authenticated API keys
+-- cannot read or write these tables. The backend connects as the table owner
+-- via DATABASE_URL, which is not subject to RLS.
+${TABLES.map((t) => `ALTER TABLE "${t}" ENABLE ROW LEVEL SECURITY;`).join("\n")}
+`;
 
-console.log(`SQLite persistence schema is ready at ${databasePath}`);
+async function main() {
+  const client = new Client({ connectionString: getDatabaseUrl() });
+  await client.connect();
+
+  try {
+    await client.query(SCHEMA_SQL);
+  } finally {
+    await client.end();
+  }
+
+  console.log("Postgres persistence schema is ready.");
+}
+
+main().catch((error) => {
+  console.error("Failed to initialise database schema:", error);
+  process.exit(1);
+});
