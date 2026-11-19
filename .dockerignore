@@ -1,0 +1,7 @@
+node_modules
+frontend
+.env
+.env.*
+prisma/dev.db*
+*.epub
+.git

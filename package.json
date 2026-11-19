@@ -5,9 +5,10 @@
   "main": "index.js",
   "scripts": {
     "db:generate": "prisma generate",
+    "db:init": "tsx src/persistence/initDb.ts",
     "db:push": "prisma generate && tsx src/persistence/initDb.ts",
     "server": "tsx src/server.ts",
-    "start": "npm run db:push && npm run server",
+    "start": "npm run db:init && npm run server",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],
@@ -16,15 +17,16 @@
   "type": "commonjs",
   "devDependencies": {
     "@types/node": "^25.9.1",
+    "@types/pg": "^8.23.1",
     "prisma": "^7.8.0",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3"
   },
   "dependencies": {
-    "@prisma/adapter-better-sqlite3": "^7.8.0",
+    "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
-    "better-sqlite3": "^12.10.0",
     "epub2": "^3.0.2",
+    "pg": "^8.23.1",
     "zod": "^4.4.3"
   }
 }

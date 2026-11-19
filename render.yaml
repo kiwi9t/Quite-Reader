@@ -1,0 +1,27 @@
+# Render Blueprint: free web service for the Quiet Reader API.
+# Database lives in Supabase (set DATABASE_URL in the Render dashboard).
+services:
+  - type: web
+    name: quiet-reader-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false # Supabase Session pooler connection string
+      - key: ALLOWED_ORIGIN
+        value: https://quite-reader.vercel.app,https://quite-reader-*.vercel.app
+      - key: LLM_PROVIDER
+        value: deepseek
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: DEEPSEEK_MODEL
+        value: deepseek-v4-flash
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: MAX_UPLOAD_BYTES
+        value: "20971520"
+      - key: LLM_TIMEOUT_MS
+        value: "45000"
