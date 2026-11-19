@@ -63,6 +63,7 @@ Selection rules:
 6. Do not select words that the user can safely ignore without losing the main idea.
 
 7. Explain each selected word in context, not as a dictionary definition.
+   Keep meaningInContextZh and whyItMatters to one short sentence each.
 
 8. Keep the output compact. Prefer 5-12 core obstacle words for a normal chapter excerpt.
 
@@ -83,14 +84,7 @@ The JSON object must match this shape:
       "severity": "low" | "medium" | "high",
       "guessableFromContext": boolean
     }
-  ],
-  "skippedGuessableWords": [
-    {
-      "text": string,
-      "reason": string
-    }
-  ],
-  "filteringSummary": string
+  ]
 }
 `;
 

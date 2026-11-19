@@ -10,6 +10,11 @@ COPY . .
 # Generate the Prisma client at build time so cold starts stay fast.
 RUN npx prisma generate
 
+# Pre-compile TypeScript once at build time. Starting with plain `node`
+# instead of compiling through tsx on every boot makes Render's cold start
+# (waking from sleep) a few seconds faster.
+RUN npm run build
+
 ENV NODE_ENV=production
 
-CMD ["npm", "run", "start"]
+CMD ["npm", "run", "start:prod"]

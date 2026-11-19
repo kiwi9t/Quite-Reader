@@ -87,15 +87,19 @@ export const CoreObstacleWordSchema = z
 export const ChapterAnalysisResultSchema = z
   .object({
     coreObstacleWords: z.array(CoreObstacleWordSchema),
-    skippedGuessableWords: z.array(
-      z
-        .object({
-          text: z.string().min(1),
-          reason: z.string().min(1),
-        })
-        .strict()
-    ),
-    filteringSummary: z.string().min(1),
+    // Not shown in the UI; no longer requested from the LLM (saves output
+    // tokens). Kept optional so older cached rows still parse.
+    skippedGuessableWords: z
+      .array(
+        z
+          .object({
+            text: z.string().min(1),
+            reason: z.string().min(1),
+          })
+          .strict()
+      )
+      .default([]),
+    filteringSummary: z.string().default(""),
   })
   .strict();
 
@@ -125,14 +129,18 @@ export const NonSpoilerContextResultSchema = z
     // 200 was too tight — Gemini consistently exceeded it, burning all retries.
     nonSpoilerGuideZh: z.string().min(1).max(500),
     contextItems: z.array(NonSpoilerContextItemSchema),
-    skippedPotentialSpoilers: z.array(
-      z
-        .object({
-          topic: z.string().min(1),
-          reason: z.string().min(1),
-        })
-        .strict()
-    ),
+    // Not shown in the UI; no longer requested from the LLM (saves output
+    // tokens). Kept optional so older cached rows still parse.
+    skippedPotentialSpoilers: z
+      .array(
+        z
+          .object({
+            topic: z.string().min(1),
+            reason: z.string().min(1),
+          })
+          .strict()
+      )
+      .default([]),
     timelineBoundaryNote: z.string().min(1),
   })
   .strict();

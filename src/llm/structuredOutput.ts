@@ -61,7 +61,7 @@ Return one strictly valid JSON object only. Do not add Markdown, prose, comments
     try {
       const response = await llm.invoke(messages);
 
-      const json = JSON.parse(response.content) as unknown;
+      const json = JSON.parse(extractJsonText(response.content)) as unknown;
       const parsed = schema.parse(json);
       const customErrors = validate?.(parsed, response.content) ?? [];
 
@@ -111,6 +111,18 @@ function isProviderError(error: unknown): boolean {
     error.name === "LLMTimeoutError" ||
     error.name === "LLMBudgetError"
   );
+}
+
+/**
+ * Some models wrap JSON in ```json fences even when told not to. Strip them
+ * locally instead of spending another full LLM round-trip on a retry.
+ *
+ * 有些模型即使被要求也会用 ```json 包裹输出；在本地去掉，避免再调用一次 LLM。
+ */
+export function extractJsonText(content: string): string {
+  const trimmed = content.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return fenced ? fenced[1] : trimmed;
 }
 
 function sleep(ms: number): Promise<void> {

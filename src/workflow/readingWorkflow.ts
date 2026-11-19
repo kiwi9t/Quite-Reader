@@ -138,8 +138,7 @@ export function buildInitialWorkflowState(
  *
  * START
  *   -> UserProfilerAgent
- *   -> ParserAnalyzerAgent
- *   -> NonSpoilerContextAgent
+ *   -> ParserAnalyzerAgent + NonSpoilerContextAgent (in parallel)
  *   -> END
  */
 export async function runReadingPreloadWorkflow(
@@ -178,69 +177,91 @@ export async function runReadingPreloadWorkflow(
   const userProfileHash = getUserProfileHash(state.userProfile);
 
   /**
-   * Edge 2:
+   * Edges 2 and 3 run in parallel:
    * UserProfilerAgent -> ParserAnalyzerAgent
+   * UserProfilerAgent -> NonSpoilerContextAgent
    *
-   * 第 2 条边：
-   * 用户画像构建器 -> 文本解析与词汇过滤器
+   * Both only need the user profile and the chapter, so there is no reason to
+   * wait for the vocabulary analysis before asking for the background context.
+   *
+   * 第 2、3 条边并行执行：两个 Agent 都只依赖用户画像和章节内容，
+   * 同时调用可以把等待时间从「两次 LLM 调用之和」缩短到「较慢的那一次」。
    */
-  const cachedAnalysis = await findCachedChapterAnalysis({
-    chapterHash,
-    userProfileHash,
-  });
-  const analysisPatch = cachedAnalysis
-    ? { analysisResult: cachedAnalysis }
-    : await parserAnalyzerAgentNode(state, llm);
-  state = mergeState(state, analysisPatch);
+  const profiledState = state;
 
-  if (!state.analysisResult) {
-    throw new Error("Workflow finished without analysisResult.");
-  }
+  const analysisTask = (async () => {
+    const cachedAnalysis = await findCachedChapterAnalysis({
+      chapterHash,
+      userProfileHash,
+    });
 
-  if (!cachedAnalysis) {
+    if (cachedAnalysis) {
+      return cachedAnalysis;
+    }
+
+    const patch = await parserAnalyzerAgentNode(profiledState, llm);
+
+    if (!patch.analysisResult) {
+      throw new Error("Workflow finished without analysisResult.");
+    }
+
     await saveChapterAnalysisCache({
       chapterHash,
       userProfileHash,
-      analysisResult: state.analysisResult,
+      analysisResult: patch.analysisResult,
     });
-  }
 
-  const readingProgressHash = await saveReadingProgress(input.readingProgress);
+    return patch.analysisResult;
+  })();
 
-  /**
-   * Edge 3:
-   * ParserAnalyzerAgent -> NonSpoilerContextAgent
-   *
-   * 第 3 条边：
-   * 文本解析与词汇过滤器 -> 无剧透背景知识探索器
-   */
-  const cachedContext = await findCachedNonSpoilerContext({
-    chapterHash,
-    readingProgressHash,
-  });
-  const contextPatch = cachedContext
-    ? { nonSpoilerContext: cachedContext }
-    : await nonSpoilerContextAgentNode(state, llm);
-  state = mergeState(state, contextPatch);
+  const contextTask = (async () => {
+    const readingProgressHash = await saveReadingProgress(input.readingProgress);
+    const cachedContext = await findCachedNonSpoilerContext({
+      chapterHash,
+      readingProgressHash,
+    });
 
-  if (!state.nonSpoilerContext) {
-    throw new Error("Workflow finished without nonSpoilerContext.");
-  }
+    if (cachedContext) {
+      return cachedContext;
+    }
 
-  if (!cachedContext) {
+    const patch = await nonSpoilerContextAgentNode(profiledState, llm);
+
+    if (!patch.nonSpoilerContext) {
+      throw new Error("Workflow finished without nonSpoilerContext.");
+    }
+
     await saveNonSpoilerContextCache({
       chapterHash,
       readingProgressHash,
-      nonSpoilerContext: state.nonSpoilerContext,
+      nonSpoilerContext: patch.nonSpoilerContext,
     });
+
+    return patch.nonSpoilerContext;
+  })();
+
+  // Attach handlers to both before awaiting so a failure in one branch never
+  // becomes an unhandled rejection while we wait on the other.
+  const [analysisSettled, contextSettled] = await Promise.allSettled([
+    analysisTask,
+    contextTask,
+  ]);
+
+  if (analysisSettled.status === "rejected") {
+    throw analysisSettled.reason;
   }
 
-  const analysisResult = state.analysisResult;
-  const nonSpoilerContext = state.nonSpoilerContext;
-
-  if (!analysisResult) {
-    throw new Error("Workflow finished without analysisResult.");
+  if (contextSettled.status === "rejected") {
+    throw contextSettled.reason;
   }
+
+  const analysisResult = analysisSettled.value;
+  const nonSpoilerContext = contextSettled.value;
+
+  state = mergeState(state, {
+    analysisResult,
+    nonSpoilerContext,
+  });
 
   return {
     nonSpoilerPreview: nonSpoilerContext.nonSpoilerGuideZh,
