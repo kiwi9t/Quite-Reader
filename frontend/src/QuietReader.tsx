@@ -2,7 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getHealth } from "./api/health";
 import { getLimits } from "./api/limits";
 import { preloadChapter } from "./api/preloadChapter";
-import { getProviders, setActiveProvider } from "./api/providers";
+import { getProviders, verifyDeepSeekKey } from "./api/providers";
+import {
+  clearDeepSeekApiKey,
+  loadDeepSeekApiKey,
+  maskApiKey,
+  saveDeepSeekApiKey,
+  type StoredApiKey,
+} from "./api/userApiKey";
 import { uploadBook } from "./api/uploadBook";
 import { ApiClientError, type HealthResponse, type LimitsResponse } from "./types/api";
 import type { ParsedBook, ParsedChapter } from "./types/book";
@@ -66,6 +73,22 @@ const I18N = {
     sectionWhy: "为什么重要",
     backend: "后端",
     healthy: "健康",
+    modelLabel: "语言模型",
+    apiKeyTitle: "你的 DeepSeek API Key",
+    apiKeyDesc: "Key 只保存在这个浏览器里，生成预览时随请求发给后端转交 DeepSeek，后端不会记录或保存。",
+    apiKeyPh: "sk-…",
+    apiKeySave: "保存",
+    apiKeyClear: "清除",
+    apiKeyVerify: "测试 Key",
+    apiKeyVerifying: "正在测试…",
+    apiKeyRemember: "在此设备记住（否则关闭标签页后清除）",
+    apiKeySaved: "已保存",
+    apiKeyValid: "Key 有效",
+    apiKeyNoBalance: "Key 有效，但账户余额不足",
+    apiKeyGet: "还没有 Key？去 DeepSeek 开放平台创建",
+    apiKeyServerFallback: "未填写时将使用服务器配置的 Key。",
+    apiKeyRequired: "请先填写你的 DeepSeek API Key。",
+    providerUnavailable: "服务器未配置该模型的 API Key。",
   },
   en: {
     productName: "Quiet Reader",
@@ -111,6 +134,22 @@ const I18N = {
     sectionWhy: "WHY IT MATTERS",
     backend: "Backend",
     healthy: "healthy",
+    modelLabel: "Language model",
+    apiKeyTitle: "Your DeepSeek API key",
+    apiKeyDesc: "The key stays in this browser. It is sent with each preview request and forwarded to DeepSeek; the backend never logs or stores it.",
+    apiKeyPh: "sk-…",
+    apiKeySave: "Save",
+    apiKeyClear: "Clear",
+    apiKeyVerify: "Test key",
+    apiKeyVerifying: "Testing…",
+    apiKeyRemember: "Remember on this device (otherwise cleared when the tab closes)",
+    apiKeySaved: "Saved",
+    apiKeyValid: "Key is valid",
+    apiKeyNoBalance: "Key is valid, but the account balance is insufficient",
+    apiKeyGet: "No key yet? Create one on the DeepSeek platform",
+    apiKeyServerFallback: "If left empty, the server's configured key is used.",
+    apiKeyRequired: "Enter your DeepSeek API key first.",
+    providerUnavailable: "This provider has no API key configured on the server.",
   },
 };
 
@@ -332,14 +371,19 @@ function LanguageSwitcher({ lang, setLang }: { lang: Lang; setLang: (lang: Lang)
 }
 
 function ProviderSelector({
+  t,
   selectedProvider,
   setSelectedProvider,
   availableProviders,
+  userKeyProviders,
 }: {
+  t: (typeof I18N)[Lang];
   selectedProvider: FrontendProvider;
   setSelectedProvider: (provider: FrontendProvider) => void | Promise<void>;
   /** Which providers have API keys configured on the backend. null = still loading. */
   availableProviders: FrontendProvider[] | null;
+  /** Providers the reader can unlock with their own API key. */
+  userKeyProviders: FrontendProvider[];
 }) {
   const ALL_PROVIDERS: Array<{ key: FrontendProvider; label: string }> = [
     { key: "deepseek", label: "DeepSeek" },
@@ -356,14 +400,16 @@ function ProviderSelector({
       }}
     >
       <div style={{ fontSize: 12, color: T.txtS, marginBottom: 6 }}>
-        Language model
+        {t.modelLabel}
       </div>
       <div style={{ display: "flex", gap: 4 }}>
         {ALL_PROVIDERS.map(({ key, label }) => {
           const isSelected  = selectedProvider === key;
           // grey out if we know it's not configured; always allow mock
           const isAvailable =
-            availableProviders === null || availableProviders.includes(key);
+            availableProviders === null ||
+            availableProviders.includes(key) ||
+            userKeyProviders.includes(key);
           const isDisabled  = !isAvailable;
 
           return (
@@ -372,7 +418,7 @@ function ProviderSelector({
               onClick={() => {
                 if (!isDisabled) void setSelectedProvider(key);
               }}
-              title={isDisabled ? `${label} API key not configured in .env` : undefined}
+              title={isDisabled ? t.providerUnavailable : undefined}
               style={{
                 border: `1px solid ${isSelected ? T.accent : T.border}`,
                 borderRadius: 5,
@@ -392,12 +438,153 @@ function ProviderSelector({
         })}
       </div>
       {availableProviders !== null &&
-        !availableProviders.includes(selectedProvider) && (
+        !availableProviders.includes(selectedProvider) &&
+        !userKeyProviders.includes(selectedProvider) && (
           <div style={{ fontSize: 11, color: T.sevHi, marginTop: 6 }}>
-            {providerDisplayName(selectedProvider)} API key not found in .env —
-            add {selectedProvider.toUpperCase()}_API_KEY and restart the server once.
+            {providerDisplayName(selectedProvider)}: {t.providerUnavailable}
           </div>
         )}
+    </div>
+  );
+}
+
+function DeepSeekKeyPanel({
+  t,
+  storedKey,
+  onSave,
+  onClear,
+  serverHasKey,
+}: {
+  t: (typeof I18N)[Lang];
+  storedKey: StoredApiKey | null;
+  onSave: (apiKey: string, remember: boolean) => void;
+  onClear: () => void;
+  /** The backend has its own DEEPSEEK_API_KEY to fall back on. */
+  serverHasKey: boolean;
+}) {
+  const [draft, setDraft] = useState("");
+  const [remember, setRemember] = useState(storedKey?.remember ?? false);
+  const [verifyState, setVerifyState] = useState<
+    | { state: "idle" }
+    | { state: "loading" }
+    | { state: "done"; message: string; ok: boolean }
+  >({ state: "idle" });
+
+  const handleSave = () => {
+    const apiKey = draft.trim();
+    if (!apiKey) return;
+    onSave(apiKey, remember);
+    setDraft("");
+    setVerifyState({ state: "idle" });
+  };
+
+  const handleVerify = async () => {
+    const apiKey = draft.trim() || storedKey?.apiKey;
+    if (!apiKey) return;
+    setVerifyState({ state: "loading" });
+    try {
+      const status = await verifyDeepSeekKey(apiKey);
+      const balance = status.balances
+        .map((item) => `${item.totalBalance} ${item.currency}`.trim())
+        .filter(Boolean)
+        .join(" · ");
+      setVerifyState({
+        state: "done",
+        ok: status.isAvailable,
+        message: `${status.isAvailable ? t.apiKeyValid : t.apiKeyNoBalance}${balance ? ` (${balance})` : ""}`,
+      });
+    } catch (caught) {
+      setVerifyState({ state: "done", ok: false, message: toErrorState(caught).message });
+    }
+  };
+
+  const smallButton: React.CSSProperties = {
+    border: `1px solid ${T.border}`,
+    borderRadius: 5,
+    background: T.surface,
+    color: T.txtS,
+    cursor: "pointer",
+    fontSize: 12,
+    fontWeight: 500,
+    padding: "4px 10px",
+    fontFamily: "inherit",
+  };
+
+  return (
+    <div
+      style={{
+        border: `1px solid ${T.border}`,
+        borderRadius: 9,
+        background: T.bg,
+        padding: 12,
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+      }}
+    >
+      <div style={{ fontSize: 12, color: T.txtS }}>{t.apiKeyTitle}</div>
+      {storedKey && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: T.txtP }}>
+          <span style={{ fontFamily: "monospace" }}>{maskApiKey(storedKey.apiKey)}</span>
+          <span style={{ color: T.good }}>{t.apiKeySaved}</span>
+          <button type="button" style={smallButton} onClick={onClear}>
+            {t.apiKeyClear}
+          </button>
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 6 }}>
+        <input
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder={t.apiKeyPh}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") handleSave();
+          }}
+          style={{ ...fieldStyle(32), flex: 1, fontSize: 13 }}
+        />
+        <button type="button" style={smallButton} onClick={handleSave} disabled={!draft.trim()}>
+          {t.apiKeySave}
+        </button>
+        <button
+          type="button"
+          style={smallButton}
+          onClick={() => void handleVerify()}
+          disabled={verifyState.state === "loading" || (!draft.trim() && !storedKey)}
+        >
+          {verifyState.state === "loading" ? t.apiKeyVerifying : t.apiKeyVerify}
+        </button>
+      </div>
+      <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: T.txtS }}>
+        <input
+          type="checkbox"
+          checked={remember}
+          onChange={(event) => {
+            setRemember(event.target.checked);
+            if (storedKey) onSave(storedKey.apiKey, event.target.checked);
+          }}
+        />
+        {t.apiKeyRemember}
+      </label>
+      {verifyState.state === "done" && (
+        <div style={{ fontSize: 12, color: verifyState.ok ? T.good : T.sevHi }}>
+          {verifyState.message}
+        </div>
+      )}
+      <div style={{ fontSize: 11, color: T.txtS, lineHeight: 1.6 }}>
+        {t.apiKeyDesc}
+        {!storedKey && serverHasKey ? ` ${t.apiKeyServerFallback}` : ""}
+      </div>
+      <a
+        href="https://platform.deepseek.com/api_keys"
+        target="_blank"
+        rel="noreferrer noopener"
+        style={{ fontSize: 11, color: T.accent }}
+      >
+        {t.apiKeyGet}
+      </a>
     </div>
   );
 }
@@ -549,6 +736,11 @@ function ErrorNotice({ error }: { error: ErrorState | null }) {
         <div style={{ color: T.txtS, marginTop: 4 }}>
           Gemini/DeepSeek quota or rate limit was reached
           {error.retryAfterSec ? ` — wait about ${error.retryAfterSec}s` : ""}. You can retry later or restart the backend with another provider.
+        </div>
+      )}
+      {error.code === "LLM_AUTH_ERROR" && (
+        <div style={{ color: T.txtS, marginTop: 4 }}>
+          The API key was rejected. Check or re-enter your DeepSeek API key above.
         </div>
       )}
       {error.code === "LLM_BILLING_ERROR" && (
@@ -1041,6 +1233,10 @@ function SetupScreen({
   selectedProvider,
   setSelectedProvider,
   availableProviders,
+  userKeyProviders,
+  deepseekKey,
+  onSaveDeepseekKey,
+  onClearDeepseekKey,
   readingLevel,
   setReadingLevel,
   readingDiff,
@@ -1062,6 +1258,10 @@ function SetupScreen({
   selectedProvider: FrontendProvider;
   setSelectedProvider: (provider: FrontendProvider) => void | Promise<void>;
   availableProviders: FrontendProvider[] | null;
+  userKeyProviders: FrontendProvider[];
+  deepseekKey: StoredApiKey | null;
+  onSaveDeepseekKey: (apiKey: string, remember: boolean) => void;
+  onClearDeepseekKey: () => void;
   readingLevel: string;
   setReadingLevel: (value: string) => void;
   readingDiff: string;
@@ -1165,7 +1365,12 @@ function SetupScreen({
     }
   };
 
-  const canProceed = parseState === "success" && !!selectedChapter && !isGenerating;
+  const serverHasSelectedProvider =
+    availableProviders === null || availableProviders.includes(selectedProvider);
+  const needsUserKey =
+    selectedProvider === "deepseek" && !deepseekKey && !serverHasSelectedProvider;
+  const canProceed =
+    parseState === "success" && !!selectedChapter && !isGenerating && !needsUserKey;
 
   return (
     <div style={{ display: "flex", height: "100%", position: "relative" }}>
@@ -1208,10 +1413,22 @@ function SetupScreen({
             />
 
             <ProviderSelector
-            selectedProvider={selectedProvider}
-            setSelectedProvider={handleProviderChange}
-            availableProviders={availableProviders}
-          />
+              t={t}
+              selectedProvider={selectedProvider}
+              setSelectedProvider={handleProviderChange}
+              availableProviders={availableProviders}
+              userKeyProviders={userKeyProviders}
+            />
+
+            {selectedProvider === "deepseek" && userKeyProviders.includes("deepseek") && (
+              <DeepSeekKeyPanel
+                t={t}
+                storedKey={deepseekKey}
+                onSave={onSaveDeepseekKey}
+                onClear={onClearDeepseekKey}
+                serverHasKey={!!availableProviders?.includes("deepseek")}
+              />
+            )}
 
             {book && (
               <BookSummary book={book} />
@@ -1238,6 +1455,9 @@ function SetupScreen({
               <div style={{ fontSize: 12, color: T.txtS }}>
                 Max chapter length: {limits.maxChapterContentChars.toLocaleString()} characters
               </div>
+            )}
+            {needsUserKey && parseState === "success" && (
+              <div style={{ fontSize: 12, color: T.sevHi }}>{t.apiKeyRequired}</div>
             )}
             <div style={{ paddingTop: 4 }}>
               <Button full disabled={!canProceed} onClick={handleGenerate}>
@@ -1511,6 +1731,10 @@ export default function QuietReader() {
   // null = still loading; populated from GET /api/providers once on mount
   const [availableProviders, setAvailableProviders] =
     useState<FrontendProvider[] | null>(null);
+  const [userKeyProviders, setUserKeyProviders] = useState<FrontendProvider[]>([]);
+  const [deepseekKey, setDeepseekKey] = useState<StoredApiKey | null>(() =>
+    loadDeepSeekApiKey()
+  );
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [limits, setLimits] = useState<LimitsResponse | null>(null);
   const [book, setBook] = useState<ParsedBook | null>(null);
@@ -1582,6 +1806,7 @@ export default function QuietReader() {
     void getProviders()
       .then((providers) => {
         setAvailableProviders(providers.available.filter(isFrontendProvider));
+        setUserKeyProviders((providers.userKeyProviders ?? []).filter(isFrontendProvider));
         if (isFrontendProvider(providers.active)) {
           setSelectedProvider(providers.active);
         }
@@ -1618,31 +1843,26 @@ export default function QuietReader() {
     setScreen("setup");
   };
 
-  const handleProviderChange = async (provider: FrontendProvider) => {
-    if (provider === selectedProvider) {
-      return;
-    }
-
-    setLastApiStatus({
-      label: "switchProvider",
-      state: "loading",
-      detail: provider,
-    });
-
-    const providerStatus = await setActiveProvider(provider);
-    setSelectedProvider(providerStatus.llmProvider);
-    setAvailableProviders(providerStatus.availableProviders.filter(isFrontendProvider));
-    setHealth({
-      ok: true,
-      message: "Reading Assistant API is healthy.",
-      llmProvider: providerStatus.llmProvider,
-      availableProviders: providerStatus.availableProviders,
-    });
+  // Provider choice is per-browser: it is sent with each preload request as
+  // ?provider=, so one reader switching models no longer changes the server
+  // default for everyone else.
+  const handleProviderChange = (provider: FrontendProvider) => {
+    setSelectedProvider(provider);
     setLastApiStatus({
       label: "switchProvider",
       state: "success",
-      detail: `provider: ${providerStatus.llmProvider}`,
+      detail: `provider: ${provider}`,
     });
+  };
+
+  const handleSaveDeepseekKey = (apiKey: string, remember: boolean) => {
+    saveDeepSeekApiKey(apiKey, remember);
+    setDeepseekKey({ apiKey, remember });
+  };
+
+  const handleClearDeepseekKey = () => {
+    clearDeepSeekApiKey();
+    setDeepseekKey(null);
   };
 
   const generateChapterPreload = async (
@@ -1681,6 +1901,7 @@ export default function QuietReader() {
 
     const nextPreload = await preloadChapter(payload, {
       provider: selectedProvider,
+      deepseekApiKey: deepseekKey?.apiKey,
     });
     setLastApiStatus({
       label: "preloadChapter",
@@ -1757,6 +1978,10 @@ export default function QuietReader() {
             selectedProvider={selectedProvider}
             setSelectedProvider={handleProviderChange}
             availableProviders={availableProviders}
+            userKeyProviders={userKeyProviders}
+            deepseekKey={deepseekKey}
+            onSaveDeepseekKey={handleSaveDeepseekKey}
+            onClearDeepseekKey={handleClearDeepseekKey}
             readingLevel={readingLevel}
             setReadingLevel={setReadingLevel}
             readingDiff={readingDiff}

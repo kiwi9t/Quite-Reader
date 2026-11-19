@@ -51,25 +51,37 @@ export function withLLMGuards(
         throw new LLMBudgetError(promptChars, options.maxPromptChars);
       }
 
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
-
-      try {
-        return await llm.invoke(messages, {
-          signal: controller.signal,
-        });
-      } catch (error) {
-        if (
-          controller.signal.aborted ||
-          (error instanceof Error && error.name === "AbortError")
-        ) {
-          throw new LLMTimeoutError(options.timeoutMs);
-        }
-
-        throw error;
-      } finally {
-        clearTimeout(timeout);
-      }
+      return withTimeout(
+        (signal) => llm.invoke(messages, { signal }),
+        options.timeoutMs
+      );
     },
   };
+}
+
+/**
+ * Run an abortable provider call, converting an abort into LLMTimeoutError.
+ * 运行可中断的 provider 调用，超时中断时转换为 LLMTimeoutError。
+ */
+export async function withTimeout<T>(
+  run: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number
+): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await run(controller.signal);
+  } catch (error) {
+    if (
+      controller.signal.aborted ||
+      (error instanceof Error && error.name === "AbortError")
+    ) {
+      throw new LLMTimeoutError(timeoutMs);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
